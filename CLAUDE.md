@@ -1,4 +1,4 @@
-# Daliy context
+# Daily context
 
 Read AGENTS.md before working on this project.
 
