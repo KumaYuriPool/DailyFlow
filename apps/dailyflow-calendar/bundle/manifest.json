@@ -1,0 +1,12 @@
+{
+  "capabilities": [
+    "storage"
+  ],
+  "id": "dailyflow-calendar",
+  "integrity": {
+    "bundle_blake3": "84c09fd352c97081d33b428667ffc6e059254a39ba14cb18d5c8dc86740ca033"
+  },
+  "name": "DailyFlow 日历",
+  "schema": 1,
+  "version": "0.1.0"
+}

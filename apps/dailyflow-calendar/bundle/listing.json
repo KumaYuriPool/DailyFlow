@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "subtitle": "干净的月历，选日子看汇总",
+  "description": "DailyFlow 系列的第一块：以日历为入口，选中任意日期查看当天记录。配合 dailyflow-expense / dailyflow-diary / dailyflow-period 使用。",
+  "category": "productivity",
+  "keywords": ["calendar", "dailyflow", "planner"],
+  "screenshots": ["screenshots/01-main.png"],
+  "icon": "assets/icon.svg",
+  "platforms": ["android"],
+  "publisher": {
+    "name": "Replace with your publisher name",
+    "support": "https://example.com/support",
+    "privacy_policy_url": "https://example.com/privacy"
+  },
+  "release_notes": "v0.1.0 initial prototype: monthly calendar grid with iOS-style selection.",
+  "age_rating": "all",
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,12 @@
+{
+  "capabilities": [
+    "storage"
+  ],
+  "id": "dailyflow-period",
+  "integrity": {
+    "bundle_blake3": "5f36fbc0a7a6699b68d17baff02457ca10d6bf69b7e470dc0f1cb326bf1f3f6b"
+  },
+  "name": "DailyFlow 经期",
+  "schema": 1,
+  "version": "0.1.0"
+}

@@ -1,0 +1,12 @@
+{
+  "capabilities": [
+    "storage"
+  ],
+  "id": "dailyflow",
+  "integrity": {
+    "bundle_blake3": "2fa8e5d11d0a90f77580b6967461bbf48e9c921e569dbb59b5712745680336fc"
+  },
+  "name": "DailyFlow",
+  "schema": 1,
+  "version": "0.1.0"
+}

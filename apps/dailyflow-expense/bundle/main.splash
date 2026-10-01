@@ -1,0 +1,10 @@
+// DailyFlow placeholder
+let ink = #x1c1c1e
+let sub = #x8e8e93
+
+SolidView{width: Fill height: Fill flow: Down draw_bg.color: #xf5f5f7
+    View{width: Fill height: Fill padding: Inset{left: 24 right: 24 top: 24}
+        Label{width: Fill text: "DailyFlow placeholder" draw_text.color: ink draw_text.text_style.font_bold{font_size: 24}}
+        Label{width: Fill text: "等待实现" draw_text.color: sub draw_text.text_style.font_size: 13}
+    }
+}

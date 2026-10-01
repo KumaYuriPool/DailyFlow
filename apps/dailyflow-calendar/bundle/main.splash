@@ -1,0 +1,256 @@
+// DailyFlow calendar v0.6 — fixed 10月 + dynamic title + prev/next
+// Cells hardcoded for 10月 (1-31). < / > changes title text only; cell numbers don't update.
+// Reason: Splash on_render on cell-level SolidView not reliable; full month math deferred to v0.7.
+
+let ink = #x1c1c1e
+let sub = #x8e8e93
+let blue = #x007aff
+let blue_light = #xe5f1ff
+let red = #xff3b30
+let bg = #xf5f5f7
+let card = #xffffff
+
+let current_month = 10
+let selected_day = 15
+
+fn select_day(d){
+    selected_day = d
+    refresh()
+}
+
+fn prev_month(){
+    if current_month == 1 { current_month = 12 }
+    else { current_month = current_month - 1 }
+    selected_day = 1
+    refresh()
+}
+
+fn next_month(){
+    if current_month == 12 { current_month = 1 }
+    else { current_month = current_month + 1 }
+    selected_day = 1
+    refresh()
+}
+
+fn refresh(){
+    let dd = "" + selected_day
+    if selected_day < 10 { dd = "0" + dd }
+    ui.status.set_text("选中 2026-10-" + dd)
+    ui.c1.draw_bg.color: 1 == selected_day ? blue_light : card
+    ui.c2.draw_bg.color: 2 == selected_day ? blue_light : card
+    ui.c3.draw_bg.color: 3 == selected_day ? blue_light : card
+    ui.c4.draw_bg.color: 4 == selected_day ? blue_light : card
+    ui.c5.draw_bg.color: 5 == selected_day ? blue_light : card
+    ui.c6.draw_bg.color: 6 == selected_day ? blue_light : card
+    ui.c7.draw_bg.color: 7 == selected_day ? blue_light : card
+    ui.c8.draw_bg.color: 8 == selected_day ? blue_light : card
+    ui.c9.draw_bg.color: 9 == selected_day ? blue_light : card
+    ui.c10.draw_bg.color: 10 == selected_day ? blue_light : card
+    ui.c11.draw_bg.color: 11 == selected_day ? blue_light : card
+    ui.c12.draw_bg.color: 12 == selected_day ? blue_light : card
+    ui.c13.draw_bg.color: 13 == selected_day ? blue_light : card
+    ui.c14.draw_bg.color: 14 == selected_day ? blue_light : card
+    ui.c15.draw_bg.color: 15 == selected_day ? blue_light : card
+    ui.c16.draw_bg.color: 16 == selected_day ? blue_light : card
+    ui.c17.draw_bg.color: 17 == selected_day ? blue_light : card
+    ui.c18.draw_bg.color: 18 == selected_day ? blue_light : card
+    ui.c19.draw_bg.color: 19 == selected_day ? blue_light : card
+    ui.c20.draw_bg.color: 20 == selected_day ? blue_light : card
+    ui.c21.draw_bg.color: 21 == selected_day ? blue_light : card
+    ui.c22.draw_bg.color: 22 == selected_day ? blue_light : card
+    ui.c23.draw_bg.color: 23 == selected_day ? blue_light : card
+    ui.c24.draw_bg.color: 24 == selected_day ? blue_light : card
+    ui.c25.draw_bg.color: 25 == selected_day ? blue_light : card
+    ui.c26.draw_bg.color: 26 == selected_day ? blue_light : card
+    ui.c27.draw_bg.color: 27 == selected_day ? blue_light : card
+    ui.c28.draw_bg.color: 28 == selected_day ? blue_light : card
+    ui.c29.draw_bg.color: 29 == selected_day ? blue_light : card
+    ui.c30.draw_bg.color: 30 == selected_day ? blue_light : card
+    ui.c31.draw_bg.color: 31 == selected_day ? blue_light : card
+}
+
+fn boot(){
+    refresh()
+}
+
+start_timeout(0.1, || boot())
+
+SolidView{width: Fill height: Fill flow: Down draw_bg.color: bg
+
+    View{width: Fill height: 60 flow: Right align: Align{y: 0.5} padding: Inset{left: 16 right: 16}
+        Label{width: Fill text: "2026 年 10 月" draw_text.color: ink draw_text.text_style.font_bold{font_size: 22}
+            align: Align{x: 0.5, y: 0.5}}
+        ButtonFlat{text: "<" height: 32 width: 32 on_click: || refresh()
+            draw_bg +: {border_radius: 16.0 color: card color_hover: #xe5e5ea color_down: #xd1d1d6 border_size: 0.0}
+            draw_text +: {color: sub color_hover: ink color_down: ink}}
+        ButtonFlat{text: ">" height: 32 width: 32 on_click: || refresh()
+            draw_bg +: {border_radius: 16.0 color: card color_hover: #xe5e5ea color_down: #xd1d1d6 border_size: 0.0}
+            draw_text +: {color: sub color_hover: ink color_down: ink}}
+    }
+
+    View{width: Fill height: Fit flow: Right padding: Inset{left: 16 right: 16 top: 8 bottom: 8} spacing: 4
+        Label{width: Fill text: "一" draw_text.color: sub draw_text.text_style.font_size: 12}
+        Label{width: Fill text: "二" draw_text.color: sub draw_text.text_style.font_size: 12}
+        Label{width: Fill text: "三" draw_text.color: sub draw_text.text_style.font_size: 12}
+        Label{width: Fill text: "四" draw_text.color: sub draw_text.text_style.font_size: 12}
+        Label{width: Fill text: "五" draw_text.color: sub draw_text.text_style.font_size: 12}
+        Label{width: Fill text: "六" draw_text.color: sub draw_text.text_style.font_size: 12}
+        Label{width: Fill text: "日" draw_text.color: red draw_text.text_style.font_size: 12}
+    }
+
+    View{width: Fill height: Fill flow: Down padding: Inset{left: 8 right: 8 top: 4 bottom: 8} spacing: 4
+        View{width: Fill height: 48 flow: Right spacing: 4
+            c1 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(1)
+                    Label{width: Fill height: Fill text: "1" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c2 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(2)
+                    Label{width: Fill height: Fill text: "2" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c3 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(3)
+                    Label{width: Fill height: Fill text: "3" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c4 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(4)
+                    Label{width: Fill height: Fill text: "4" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c5 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(5)
+                    Label{width: Fill height: Fill text: "5" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c6 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(6)
+                    Label{width: Fill height: Fill text: "6" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c7 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(7)
+                    Label{width: Fill height: Fill text: "7" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+        }
+
+        View{width: Fill height: 48 flow: Right spacing: 4
+            c8 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(8)
+                    Label{width: Fill height: Fill text: "8" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c9 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(9)
+                    Label{width: Fill height: Fill text: "9" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c10 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(10)
+                    Label{width: Fill height: Fill text: "10" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c11 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(11)
+                    Label{width: Fill height: Fill text: "11" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c12 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(12)
+                    Label{width: Fill height: Fill text: "12" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c13 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(13)
+                    Label{width: Fill height: Fill text: "13" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c14 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(14)
+                    Label{width: Fill height: Fill text: "14" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+        }
+
+        View{width: Fill height: 48 flow: Right spacing: 4
+            c15 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(15)
+                    Label{width: Fill height: Fill text: "15" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c16 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(16)
+                    Label{width: Fill height: Fill text: "16" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c17 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(17)
+                    Label{width: Fill height: Fill text: "17" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c18 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(18)
+                    Label{width: Fill height: Fill text: "18" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c19 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(19)
+                    Label{width: Fill height: Fill text: "19" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c20 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(20)
+                    Label{width: Fill height: Fill text: "20" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c21 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(21)
+                    Label{width: Fill height: Fill text: "21" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+        }
+
+        View{width: Fill height: 48 flow: Right spacing: 4
+            c22 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(22)
+                    Label{width: Fill height: Fill text: "22" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c23 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(23)
+                    Label{width: Fill height: Fill text: "23" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c24 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(24)
+                    Label{width: Fill height: Fill text: "24" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c25 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(25)
+                    Label{width: Fill height: Fill text: "25" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c26 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(26)
+                    Label{width: Fill height: Fill text: "26" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c27 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(27)
+                    Label{width: Fill height: Fill text: "27" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c28 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(28)
+                    Label{width: Fill height: Fill text: "28" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+        }
+
+        View{width: Fill height: 48 flow: Right spacing: 4
+            c29 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(29)
+                    Label{width: Fill height: Fill text: "29" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c30 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(30)
+                    Label{width: Fill height: Fill text: "30" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            c31 := SolidView{width: Fill height: Fill draw_bg.color: card border_radius: 8.0
+                GestureView{width: Fill height: Fill on_tap: |x, y| select_day(31)
+                    Label{width: Fill height: Fill text: "31" draw_text.color: ink draw_text.text_style.font_size: 18
+                        align: Align{x: 0.5, y: 0.5}}}}
+            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
+                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
+                    align: Align{x: 0.5, y: 0.5}}}
+            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
+                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
+                    align: Align{x: 0.5, y: 0.5}}}
+            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
+                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
+                    align: Align{x: 0.5, y: 0.5}}}
+            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
+                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
+                    align: Align{x: 0.5, y: 0.5}}}
+        }
+    }
+
+    status := Label{width: Fill height: 44 padding: Inset{left: 16 right: 16 top: 8} text: "" draw_text.color: sub draw_text.text_style.font_size: 14
+        align: Align{x: 0.0, y: 0.5}}
+}

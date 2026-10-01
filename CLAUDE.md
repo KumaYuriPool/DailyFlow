@@ -1,4 +1,4 @@
-# Daily context
+# DailyFlow context
 
 Read AGENTS.md before working on this project.
 

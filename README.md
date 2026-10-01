@@ -1,23 +1,33 @@
-# Daily
+# DailyFlow
 
-面向 OctoSense、以日历为入口的个人生活记录应用。
+以日历为入口，串联记录、进展与行动。
 
-通过对话整理日常记录，通过日历切换视角回看。首批模块为记账、日记和经期；明确内容自动记录，含糊内容先追问，并支持修改与撤销。
+DailyFlow 面向 OctoSense，目标是通过统一事件协议把生活记录、任务和持续新闻组织为时间 Flow。专业模块保留自己的业务能力，对话与卡片提供记录、查询和操作入口，遵循“明确内容自动记，含糊再问”。
 
 ## 当前状态
 
-2026-10-01：已创建项目骨架并形成产品策划案，尚未开发页面、记录逻辑或 AI 功能。当前授权为产品规划。
+2026-10-02：用户确认全面更名为 **DailyFlow**。本地仓库、文档、应用与数据统一位于 `D:\Life\AgenticApp\DailyFlow`。
 
-- 项目名称：Daily
-- 本地目录仍为 `Daliy/`，用户已确认产品拼写改为 Daily；本轮未移动目录。
-- 计划应用 ID：daily，尚未生成应用 manifest。
-- 开发环境：Windows / PowerShell，使用工作区已有 OctoSense 工具链。
-- `bundle/`：预留应用包目录，目前只有目录占位文件，不可运行或发布。
-- 需求记录：[BRIEF.md](BRIEF.md)。
-- 产品策划案：[docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)，包含产品评价、首版范围、自动记录规则、框架建议及验收标准。
-- 模型接手入口：[AGENTS.md](AGENTS.md)。
+| 路径 | 用途与状态 |
+| --- | --- |
+| `docs/` | 产品规划、路线图和接手资料 |
+| `apps/dailyflow-calendar/bundle/` | 日历原型，真实月份切换仍待完善 |
+| `apps/dailyflow-expense/bundle/` | 记账占位应用 |
+| `apps/dailyflow-diary/bundle/` | 日记占位应用 |
+| `apps/dailyflow-period/bundle/` | 经期占位应用 |
+| `bundle/` | 历史单 bundle 原型，ID 为 `dailyflow` |
+| `.local-state/`、各 App 的 `.local-state/` | 本地运行数据，不进入 Git |
+| `build/`、各 App 的 `build/` | 截图、日志与更名验证证据，不进入 Git |
 
-工作区已有的 `../my-notes` 是独立的参考 Demo，其功能未复制到本项目。
-完整环境、Windows 运行时修复和历史验证见工作区的 `../agent.md`。
+目前仍为四个独立 App；单 App 协议验证是下一阶段建议，尚未实施功能合并。AI、宿主卡片和后台提醒均不能视为已完成。
 
-建议下一步评审日历首页、当天详情、对话回执和模块编辑页的低保真原型；开始业务开发仍需用户明确指令。策划案中的建议默认值不等同于已确认需求。
+## 文档入口
+
+- [产品愿景与路线图](docs/PRODUCT_VISION_ROADMAP.md)
+- [项目交接](docs/HANDOFF.md)
+- [需求摘要](BRIEF.md)
+- [原产品策划案](docs/PRODUCT_PLAN.md)
+- [更名记录](docs/RENAMING.md)
+- [Agent 接手规则](AGENTS.md)
+
+工作区中的 `my-notes` 是独立 Demo。Windows 运行时修复和历史验证见 [工作区交接记录](../agent.md)。本地更名不包含提交、推送或发布。

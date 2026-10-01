@@ -1,25 +1,24 @@
-# Daily — agent handoff
+# DailyFlow agent handoff
 
 ## Current authorization and scope
 
-The user explicitly confirmed the product spelling **Daily** on 2026-10-01, superseding the original Daliy name. The local directory remains Daliy. It is a calendar-centered personal life-recording app with diary, bookkeeping and menstrual-record modules. Conversational bookkeeping is a key entry point. The user confirmed: automatically save clear facts, ask about ambiguous ones.
+On 2026-10-02 the user explicitly requested renaming the product, local directories, app IDs and references to **DailyFlow**. The local repository is now `D:\Life\AgenticApp\DailyFlow`; the former document repository and app directory have been consolidated here. See `docs/RENAMING.md` for the mapping and verification.
 
-Initialization and product planning are complete. The latest instruction authorizes summarizing, evaluating and optimizing the idea and creating a product plan. Do not implement UI, accounting, categorization, AI calls, or storage until the user explicitly asks to start development. Proposed defaults in the plan are not confirmed requirements.
+The latest product direction is a calendar-led time Flow system with a common event protocol, business module entry points, cards, reminders and Agent operations. Read `docs/PRODUCT_VISION_ROADMAP.md`, `docs/HANDOFF.md`, `README.md` and `BRIEF.md`. Communicate with the user in Chinese.
 
-Read README.md, BRIEF.md and docs/PRODUCT_PLAN.md first. Communicate with the user in Chinese. Update these records and the workspace's ../agent.md after meaningful authorized progress.
+The rename is authorized; it does not authorize implementing the roadmap, merging the four apps into one functional app, publishing, committing or pushing. A single-app protocol validation is proposed, not implemented. Preserve existing changes and user data.
 
-## Environment context
+## Project and environment
 
-- Local project: D:\Life\AgenticApp\Daliy.
-- For verified Windows setup and commands, read ../agent.md if available. That workspace record includes the existing Makepad Windows rendering patch; preserve it.
-- ../my-notes is a separate reference demo, not this product's implementation.
-- Planned app ID: daily, following the user's README correction. No manifest or program has been generated yet.
-- bundle/.gitkeep is only a directory placeholder; remove it when assembling a real app bundle. It is not a valid submission asset.
-- There is no runnable Daily application or verified application test. Signing, publisher identity and publishing have not been established in this work.
-- At the start of this planning turn, main tracked origin/main and HEAD was cf40e03 (fix:拼写错误), with a clean working tree. Preserve the user's committed spelling correction. This turn adds documentation only; no commit or push was requested.
+- Four current bundles live under `apps/dailyflow-{calendar,expense,diary,period}/bundle/`. The calendar is a prototype; the other three are placeholders.
+- The historical single bundle lives in `bundle/` with ID `dailyflow`. Its previous data namespace has been renamed to `.local-state/dailyflow/` without changing record contents.
+- App-specific data uses `apps/<app>/.local-state/<app>/`. Do not put local data, build output, logs or credentials into bundles or Git.
+- Read `../agent.md` for Windows setup and actual verification. Preserve the local Makepad Windows rendering patch and the existing App Hub Cargo.lock changes. Do not reset runtime repositories.
+- `../my-notes` is a separate reference demo.
+- Gate checks do not prove visual quality, complete functionality or publication. Preserve historical evidence; do not rewrite old logs or screenshots to claim new tests.
 
-## When development is authorized later
+## Future development
 
-Use documented APIs and recheck current upstream sources. The local Design Flow AI document lags newer upstream facts: OctoSense PR #95 merged model.complete on 2026-09-28. That is a candidate for structured extraction, but the local standalone card-host has not been verified to provide it. See the product plan's sourced capability section. Do not confuse one-shot model calls, system assistant access, and the still-planned full per-app Agent lifecycle. Verify the actual Windows host and permissions before selecting the integration.
+Verify model, AppCard, glance, app-tool routing and background scheduling separately in the installed Windows host. Newer local OctoSense source contains capabilities absent from older documentation, but source inspection is not runtime verification. Keep the user's rule: automatically save clear facts and ask about ambiguous ones.
 
-Only the actual bundle is submitted to App Hub. Keep local data, credentials, build output and review material outside the bundle and Git. Preserve user data and sibling repositories; do not reset the runtime to discard the local Windows fix.
+Update project documentation and `../agent.md` after meaningful progress. Signing, publisher identity and publishing remain separate work. The remote repository must only be changed to a new URL after its existence and rename have been verified.
