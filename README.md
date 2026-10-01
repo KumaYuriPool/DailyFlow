@@ -1,4 +1,4 @@
-# Daliy
+# Daily
 
 面向 OctoSense 的个人记账工具。
 
@@ -8,8 +8,8 @@
 
 2026-10-01：仅创建项目骨架，尚未开发任何页面、记账、分类或 AI 功能。
 
-- 项目名称：**Daliy**，保留用户指定拼写，不改成 Daily。
-- 计划应用 ID：`daliy`，尚未生成应用 manifest。
+- 项目名称：Daily
+- 计划应用 ID：daily，尚未生成应用 manifest。
 - 开发环境：Windows / PowerShell，使用工作区已有 OctoSense 工具链。
 - `bundle/`：预留应用包目录，目前只有目录占位文件，不可运行或发布。
 - 需求记录：[BRIEF.md](BRIEF.md)。
