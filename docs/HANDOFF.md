@@ -4,13 +4,25 @@
 **版本**：v0.6（含 4-bundle 拆分 + iOS 极简日历 v0.5）
 **目的**：让任何接手 agent 能在 30 分钟内理解项目状态并能继续开发
 
+## 2026-10-02 单 App 0.2.0 最新实现（优先于下方历史）
+
+`bundle/main.splash` 已成为统一入口；运行 `run-dailyflow.cmd`。当前可手工管理真实月历、Flow、记账/经期/任务/新闻，使用预算提醒、任务运行时检查与重开补偿、双槽持久化及备份恢复。真实点击、控件树、文件与截图证据见 [MVP 验收报告](MVP_ACCEPTANCE_REPORT.md)；操作见 [USER_GUIDE](USER_GUIDE.md)，数据字段和一致性边界见 [DATA_PROTOCOL](DATA_PROTOCOL.md)。
+
+真实 `model.complete` 已获权限但返回 `no service answers "model" on this device`；输入保留，手工卡片可用。AI 自动记录、歧义追问与模型更正闭环未完成。AppCard/glance、关闭后后台唤醒和 7 天真实试用不在已通过项内。没有修改 Rust 或发布、提交、推送。
+
+备份在 `build/mvp-baseline-20261002/`，主要回归证据在 `build/mvp-final/`，故障注入在 `build/mvp-failure/`，旧账本导入验证在 `build/mvp-legacy/`。真实 `.local-state/dailyflow/expenses.json` 不变，导入需在设置显式点击。
+
+新发现：动态循环构造 42 格月历可行，旧“约 80 个控件上限”不是当前依据；不要使用未验证的三元表达式。存储错误会抛出 VM 错误，必须用 `try/catch` 捕获；损坏 JSON 可能返回缺字段对象，结构验证也需要捕获。所有 UI 引用在初始化后执行；定时规则在成功加载后才允许写入。正常业务运行未复现旧独立日历的 `ui target nil`。
+
+最新开发授权：用户已明确要求新 Agent 开发并跑通单 App 时间 Flow 验证版。接手应先读 [IMPLEMENTATION_HANDOFF](IMPLEMENTATION_HANDOFF.md)，以 `bundle/` 为统一实现入口；保留四个原型 App。旧“只规划”或“不逆转四 bundle”表述不再限制本次获授权开发。只允许 OctoScript/Splash 和现有宿主 API，不扩展 Rust。
+
 2026-10-02 更名补充：本地项目已统一为 DailyFlow，应用 ID 为 `dailyflow` / `dailyflow-*`，详见 [更名记录](RENAMING.md)。本轮五个 bundle 准入检查通过，但独立日历运行时仍复现既有 UI nil 错误；下方历史“0 错误”不代表当前结果。
 
 ---
 
 ## 0. 一句话总结
 
-> 当前代码仍为四个独立 Splash bundle，日历为原型，其余三个为占位页。2026-10-02 的新产品讨论将 DailyFlow 延伸为以日历为入口的时间 Flow 系统，建议先在单 App 内验证统一协议；尚未实施合并。请先读 [产品愿景与路线图](PRODUCT_VISION_ROADMAP.md)。
+> 当前使用 `bundle/` 单 App，四 bundle 保留作历史参考。请先读本页顶部最新实现与验收报告；下面 v0.6 等章节是历史，不代表当前功能与测试结果。
 
 能力说明更新：较新的本地 OctoSense 源码已有应用工具授权转发和交互 glance 卡片，不能再笼统说“完全没有跨 App 通信”。DailyFlow 的工具接入、记录级跳转和后台提醒仍需分别验证；源码能力不等于已安装 Windows 程序已可用。下文与旧调研保留历史信息，有冲突时参考新产品文档及工作区 `agent.md` 的最新补充。
 

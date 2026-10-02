@@ -1,271 +1,492 @@
-// DailyFlow v0.4 baseline — minimal calendar, no on_render trick
-// Each cell is a separate GestureView with hard-coded text. selected_day tracked.
-// NO parse_int, NO triple-conditional expressions — keep syntax simple.
-
-let ink = #x1c1c1e
-let sub = #x8e8e93
-let blue = #x007aff
-let blue_light = #xe5f1ff
-let red = #xff3b30
-let bg = #xf5f5f7
-let card = #xffffff
-
-let current_year = 2026
-let current_month = 10
-let selected_day = 15
-
-fn days_in_month(y, m){
-    if m == 2 {
-        let leap = (y % 4 == 0) && ((y % 100 != 0) || (y % 400 == 0))
-        if leap { return 29 }
-        return 28
+// DailyFlow: all business operations and persistence run in OctoScript/Splash.
+let db = {schema_version: 1 revision: 0 seq: 0 records: [] flows: [] alerts: [] budget_cents: 0 budget_month: "" budget_notified: false period_enabled: false private_hidden: true}
+let screen = "calendar"
+let message = "读取本地数据"
+let yy = 2026
+let mm = 10
+let selected = ""
+let active_flow = ""
+let module_filter = "all"
+let edit_id = ""
+let edit_revision = 0
+let draft_kind = "expense"
+let draft_title = ""
+let draft_date = ""
+let draft_value = ""
+let draft_end = ""
+let draft_source = ""
+let draft_time = "09:00"
+let draft_flow = ""
+let jump_date = ""
+let chat_text = ""
+let chat_result = "明确记录可使用下方手工操作卡片。"
+let busy = false
+let request_serial = 0
+let last_saved = ""
+let restore_armed = false
+let delete_armed = false
+let locked = false
+let loaded = false
+let page_offset = 0
+let ink = #x172b3a
+let muted = #x607586
+let accent = #x176b87
+fn pad(n){ if n < 10 { return "0" + n } return "" + n }
+fn date_text(y,m,d){ return "" + y + "-" + pad(m) + "-" + pad(d) }
+fn leap(y){ return y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) }
+fn month_days(y,m){
+    if m == 2 { if leap(y) { return 29 } return 28 }
+    if m == 4 || m == 6 || m == 9 || m == 11 { return 30 } return 31
+}
+fn valid_date(s){
+    if !s.is_string() { return false }
+    if !regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "").test(s) { return false }
+    let a = s.split("-") let y = a[0].to_f64() let m = a[1].to_f64() let d = a[2].to_f64()
+    return y >= 1970 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= month_days(y,m)
+}
+fn epoch_day(s){
+    let a = s.split("-") let y = a[0].to_f64() let m = a[1].to_f64() let days = a[2].to_f64() - 1
+    days += 365 * (y - 1970) + floor((y - 1) / 4) - 492 - floor((y - 1) / 100) + 19 + floor((y - 1) / 400) - 4
+    let mo = 1 while mo < m { days += month_days(y,mo) mo += 1 } return days
+}
+fn today(){ let t = local_time(time_now() + 28800) return date_text(t.year,t.month,t.day) }
+fn month_of(s){ let a = s.split("-") return a[0] + "-" + a[1] }
+fn amount_cents(s){
+    if !regex("^[0-9]{1,8}(\\.[0-9]{1,2})?$", "").test(s) { return -1 }
+    let parts = s.split(".") let v = parts[0].to_f64() * 100
+    if parts.len() == 2 { let fraction = parts[1] if fraction.len() == 1 { fraction += "0" } v += fraction.to_f64() } return v
+}
+fn money(n){ return "" + floor(n / 100) + "." + pad(n % 100) }
+fn find_record(id){ for r in db.records { if r.id == id { return r } } return nil }
+fn flow_name(id){ for f in db.flows { if f.id == id { return f.name } } return "全部记录" }
+fn member(r,id){ if id == "" { return true } for f in r.flow_ids { if f == id { return true } } return false }
+fn kind_name(k){ if k == "expense" { return "记账" } if k == "period" { return "经期" } if k == "task" { return "任务" } return "新闻" }
+fn stamp_text(n){ let t = local_time(n + 28800) return date_text(t.year,t.month,t.day) + " " + pad(t.hour) + ":" + pad(t.minute) }
+fn task_status(s){ if s == "pending" { return "待办" } if s == "done" { return "已完成" } return "已取消" }
+fn summary(r){
+    if r.kind == "period" && db.private_hidden { return "私密记录（已隐藏）" }
+    let s = kind_name(r.kind) + " · " + r.title
+    if r.kind == "expense" { s += "  ¥" + money(r.cents) }
+    if r.kind == "task" { s += "  [" + task_status(r.status) + "]" } return s
+}
+fn event_of(r){
+    let precision = "day" if r.kind == "task" { precision = "minute" }
+    let tk = "date" if r.kind == "period" { tk = "open_interval" if r.end_date != "" { tk = "interval" } } if r.kind == "task" { tk = "planned" }
+    return {schema_version: 1 event_id: "event-" + r.id source_app: "dailyflow" source_record_id: r.id source_revision: r.revision event_type: r.kind title: r.title time_kind: tk date: r.date end_date: r.end_date due_at: r.due_at completed_at: r.completed_at timezone: "Asia/Shanghai" precision: precision created_at: r.created_at updated_at: r.updated_at status: r.status flow_ids: r.flow_ids entry: {target: r.kind record_id: r.id action: "detail"}}
+}
+fn total_month(mon){ let n = 0 for r in db.records { if r.kind == "expense" && month_of(r.date) == mon { n += r.cents } } return n }
+fn total_day(day){ let n = 0 for r in db.records { if r.kind == "expense" && r.date == day { n += r.cents } } return n }
+fn total_flow(id){ let n = 0 for r in db.records { if r.kind == "expense" && member(r,id) { n += r.cents } } return n }
+fn valid_db(v){
+    let valid = false
+    try { valid = valid_db_fields(v) } catch { valid = false }
+    return valid
+}
+fn valid_db_fields(v){
+    if !v.is_object() { return false }
+    if v.schema_version != 1 || !v.records.is_array() || !v.flows.is_array() || !v.alerts.is_array() { return false }
+    if !(v.revision >= 0) || !(v.seq >= 0) || !(v.budget_cents >= 0) { return false }
+    if v.records.len() > 800 || v.flows.len() > 80 || v.alerts.len() > 1600 { return false }
+    let ids = []
+    for f in v.flows {
+        if !f.is_object() { return false }
+        if !f.id.is_string() || !f.name.is_string() || !f.hidden.is_bool() { return false }
+        for id in ids { if id == f.id { return false } } ids.push(f.id)
     }
-    if m == 4 || m == 6 || m == 9 || m == 11 { return 30 }
-    return 31
-}
-
-fn first_weekday(y, m){
-    let y0 = 1970
-    let m0 = 1
-    let total = 0
-    if y > y0 || (y == y0 && m > m0) {
-        let yy = y0
-        while yy < y {
-            total = total + days_in_month(yy, m)
-            yy = yy + 1
-        }
-        let mm = m0
-        while mm < m {
-            total = total + days_in_month(y, mm)
-            mm = mm + 1
-        }
-    } else {
-        let yy = y
-        while yy < y0 {
-            total = total - days_in_month(yy, m)
-            yy = yy + 1
-        }
-        let mm = m
-        while mm > m0 {
-            total = total - days_in_month(y, mm - 1)
-            mm = mm - 1
-        }
+    ids = []
+    for r in v.records {
+        if !r.is_object() { return false }
+        if !r.id.is_string() || !r.title.is_string() || !r.flow_ids.is_array() || !valid_date(r.date) { return false }
+        if r.kind != "expense" && r.kind != "period" && r.kind != "task" && r.kind != "news" { return false }
+        if !r.end_date.is_string() || !r.source.is_string() || !r.status.is_string() { return false }
+        if r.end_date != "" { if !valid_date(r.end_date) || epoch_day(r.end_date) < epoch_day(r.date) { return false } }
+        if !(r.revision >= 1) || !(r.created_at >= 0) || !(r.updated_at >= 0) || !(r.cents >= 0) || r.cents != floor(r.cents) { return false }
+        if !(r.due_at >= 0) || !(r.completed_at >= 0) || !(r.reminded_due >= 0) { return false }
+        for id in ids { if id == r.id { return false } } ids.push(r.id)
+        for fid in r.flow_ids { let exists = false for f in v.flows { if f.id == fid { exists = true } } if !exists { return false } }
     }
-    let wd = ((total % 7) + 4 + 7) % 7
-    return (wd + 6) % 7
+    for a in v.alerts { if !a.is_object() { return false } if !a.key.is_string() || !a.text.is_string() || !a.record_id.is_string() || !a.active.is_bool() { return false } }
+    return v.period_enabled.is_bool() && v.private_hidden.is_bool() && v.budget_notified.is_bool() && v.budget_month.is_string()
 }
-
-fn is_in_month(d){
-    let first = first_weekday(current_year, current_month)
-    let total = days_in_month(current_year, current_month)
-    let day_idx = d - first
-    if day_idx < 0 { return 0 }
-    if day_idx >= total { return 0 }
-    return 1
+fn write_checked(path,text){
+    let success = false
+    try { fs.write(path,text) success = fs.read(path) == text } catch { success = false }
+    return success
 }
-
-fn prev_month(){
-    if current_month == 1 { current_month = 12 current_year = current_year - 1 }
-    else { current_month = current_month - 1 }
-    selected_day = 1
+fn read_json(path){
+    let data = nil
+    try { if fs.exists(path) { data = fs.read(path).parse_json() } } catch { data = nil }
+    return data
 }
+fn clone_db(){ return db.to_json().parse_json() }
+fn refresh_status(){ ui.status.set_text(message) }
+fn redraw(){ refresh_status() ui.page.render() }
+fn navigate(s){ message = "数据已保存在本机 · Asia/Shanghai" go(s) }
+fn go(s){ if s == "settings" { draft_value = money(db.budget_cents) } screen = s page_offset = 0 delete_armed = false restore_armed = false redraw() }
+fn persist(candidate){
+    if !loaded { message = "数据尚未读完，未保存。" refresh_status() return false }
+    if locked { message = "数据异常：只读保护中。请到设置恢复备份。" refresh_status() return false }
+    candidate.revision = db.revision + 1
+    if !valid_db(candidate) { message = "校验失败，未保存。" refresh_status() return false }
+    let name = "state-a.json" if candidate.revision % 2 == 0 { name = "state-b.json" }
+    let serialized = candidate.to_json()
+    if !write_checked(name,serialized) { message = "写入失败，未保存；输入仍保留。" refresh_status() return false }
 
-fn next_month(){
-    if current_month == 12 { current_month = 1 current_year = current_year + 1 }
-    else { current_month = current_month + 1 }
-    selected_day = 1
+    db = candidate return true
 }
-
-fn select_day(d){
-    selected_day = d
-}
-
-fn boot(){}
-
-SolidView{width: Fill height: Fill flow: Down draw_bg.color: bg
-
-    View{width: Fill height: 60 flow: Right align: Align{y: 0.5} padding: Inset{left: 16 right: 16}
-        ButtonFlat{text: "<" height: 32 width: 32 on_click: || prev_month()
-            draw_bg +: {border_radius: 16.0 color: card color_hover: #xe5e5ea color_down: #xd1d1d6 border_size: 0.0}
-            draw_text +: {color: ink color_hover: ink color_down: ink}}
-        Label{width: Fill text: "" draw_text.color: ink draw_text.text_style.font_bold{font_size: 22}
-            align: Align{x: 0.5, y: 0.5}
-            on_render: || set_text("" + current_year + " 年 " + current_month + " 月")}
-        ButtonFlat{text: ">" height: 32 width: 32 on_click: || next_month()
-            draw_bg +: {border_radius: 16.0 color: card color_hover: #xe5e5ea color_down: #xd1d1d6 border_size: 0.0}
-            draw_text +: {color: ink color_hover: ink color_down: ink}}
+fn check_rules(c){
+    let mon = month_of(today()) if c.budget_month != mon { c.budget_month = mon c.budget_notified = false }
+    let sum = 0 for r in c.records { if r.kind == "expense" && month_of(r.date) == mon { sum += r.cents } }
+    if sum <= c.budget_cents || c.budget_cents == 0 { for a in c.alerts { if a.record_id == "" { a.active = false } } }
+    if c.budget_cents > 0 && sum > c.budget_cents && !c.budget_notified {
+        c.budget_notified = true c.alerts.push({key: "budget-" + mon text: mon + " 首次超过预算" record_id: "" active: true created_at: time_now()})
     }
-
-    View{width: Fill height: Fit flow: Right padding: Inset{left: 16 right: 16 top: 8 bottom: 8} spacing: 4
-        Label{width: Fill text: "一" draw_text.color: sub draw_text.text_style.font_size: 12}
-        Label{width: Fill text: "二" draw_text.color: sub draw_text.text_style.font_size: 12}
-        Label{width: Fill text: "三" draw_text.color: sub draw_text.text_style.font_size: 12}
-        Label{width: Fill text: "四" draw_text.color: sub draw_text.text_style.font_size: 12}
-        Label{width: Fill text: "五" draw_text.color: sub draw_text.text_style.font_size: 12}
-        Label{width: Fill text: "六" draw_text.color: sub draw_text.text_style.font_size: 12}
-        Label{width: Fill text: "日" draw_text.color: red draw_text.text_style.font_size: 12}
-    }
-
-    View{width: Fill height: Fill flow: Down padding: Inset{left: 8 right: 8 top: 4 bottom: 8} spacing: 4
-        // Row 1
-        View{width: Fill height: 48 flow: Right spacing: 4
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(1)
-                SolidView{width: Fill height: Fill draw_bg.color: 1 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "1" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(2)
-                SolidView{width: Fill height: Fill draw_bg.color: 2 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "2" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(3)
-                SolidView{width: Fill height: Fill draw_bg.color: 3 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "3" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(4)
-                SolidView{width: Fill height: Fill draw_bg.color: 4 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "4" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(5)
-                SolidView{width: Fill height: Fill draw_bg.color: 5 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "5" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(6)
-                SolidView{width: Fill height: Fill draw_bg.color: 6 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "6" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(7)
-                SolidView{width: Fill height: Fill draw_bg.color: 7 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "7" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-        }
-
-        // Row 2
-        View{width: Fill height: 48 flow: Right spacing: 4
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(8)
-                SolidView{width: Fill height: Fill draw_bg.color: 8 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "8" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(9)
-                SolidView{width: Fill height: Fill draw_bg.color: 9 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "9" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(10)
-                SolidView{width: Fill height: Fill draw_bg.color: 10 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "10" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(11)
-                SolidView{width: Fill height: Fill draw_bg.color: 11 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "11" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(12)
-                SolidView{width: Fill height: Fill draw_bg.color: 12 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "12" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(13)
-                SolidView{width: Fill height: Fill draw_bg.color: 13 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "13" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(14)
-                SolidView{width: Fill height: Fill draw_bg.color: 14 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "14" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-        }
-
-        // Row 3
-        View{width: Fill height: 48 flow: Right spacing: 4
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(15)
-                SolidView{width: Fill height: Fill draw_bg.color: 15 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "15" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(16)
-                SolidView{width: Fill height: Fill draw_bg.color: 16 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "16" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(17)
-                SolidView{width: Fill height: Fill draw_bg.color: 17 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "17" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(18)
-                SolidView{width: Fill height: Fill draw_bg.color: 18 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "18" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(19)
-                SolidView{width: Fill height: Fill draw_bg.color: 19 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "19" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(20)
-                SolidView{width: Fill height: Fill draw_bg.color: 20 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "20" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(21)
-                SolidView{width: Fill height: Fill draw_bg.color: 21 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "21" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-        }
-
-        // Row 4
-        View{width: Fill height: 48 flow: Right spacing: 4
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(22)
-                SolidView{width: Fill height: Fill draw_bg.color: 22 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "22" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(23)
-                SolidView{width: Fill height: Fill draw_bg.color: 23 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "23" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(24)
-                SolidView{width: Fill height: Fill draw_bg.color: 24 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "24" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(25)
-                SolidView{width: Fill height: Fill draw_bg.color: 25 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "25" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(26)
-                SolidView{width: Fill height: Fill draw_bg.color: 26 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "26" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(27)
-                SolidView{width: Fill height: Fill draw_bg.color: 27 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "27" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(28)
-                SolidView{width: Fill height: Fill draw_bg.color: 28 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "28" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-        }
-
-        // Row 5
-        View{width: Fill height: 48 flow: Right spacing: 4
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(29)
-                SolidView{width: Fill height: Fill draw_bg.color: 29 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "29" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(30)
-                SolidView{width: Fill height: Fill draw_bg.color: 30 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "30" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            GestureView{width: Fill height: 48 on_tap: |x, y| select_day(31)
-                SolidView{width: Fill height: Fill draw_bg.color: 31 == selected_day ? blue_light : card border_radius: 8.0
-                    Label{width: Fill height: Fill text: "31" draw_text.color: ink draw_text.text_style.font_size: 18
-                        align: Align{x: 0.5, y: 0.5}}}}
-            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
-                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
-                    align: Align{x: 0.5, y: 0.5}}}
-            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
-                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
-                    align: Align{x: 0.5, y: 0.5}}}
-            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
-                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
-                    align: Align{x: 0.5, y: 0.5}}}
-            SolidView{width: Fill height: Fill draw_bg.color: bg border_radius: 8.0
-                Label{width: Fill height: Fill text: " " draw_text.color: sub draw_text.text_style.font_size: 18
-                    align: Align{x: 0.5, y: 0.5}}}
+    for r in c.records {
+        if r.kind == "task" && r.status == "pending" && r.due_at <= time_now() && r.reminded_due != r.due_at {
+            r.reminded_due = r.due_at c.alerts.push({key: "due-" + r.id + "-" + r.due_at text: "任务到期：" + r.title record_id: r.id active: true created_at: time_now()})
         }
     }
-
-    View{width: Fill height: 40 flow: Right align: Align{y: 0.5} padding: Inset{left: 16 right: 16}
-        Label{width: Fill text: "" draw_text.color: sub draw_text.text_style.font_size: 13
-            on_render: || set_text("选中 2026-10-15")}
+}
+fn compensate(){
+    if locked || !loaded { return } let c = clone_db() check_rules(c)
+    if c.to_json() != db.to_json() { if persist(c) { message = "提醒已检查并保存（运行中与重开补偿）" if screen == "alerts" { redraw() } else { refresh_status() } } }
+}
+fn boot(){
+    let a = nil let b = nil
+    if fs.exists("state-a.json") { a = read_json("state-a.json") }
+    if fs.exists("state-b.json") { b = read_json("state-b.json") }
+    let va = valid_db(a) let vb = valid_db(b)
+    if va { db = a } if vb { if !va || b.revision > db.revision { db = b } }
+    message = "本地数据已就绪 · 提醒仅在运行中检查，重开补偿"
+    if !va && !vb && (fs.exists("state-a.json") || fs.exists("state-b.json")) { locked = true message = "存储损坏，已停止写入；请从备份恢复。" }
+    if !va && !vb && !locked && fs.exists("expenses.json") { message = "检测到旧账本；设置中可导入，原文件不会改动。" }
+    selected = today() let t = selected.split("-") yy = t[0].to_f64() mm = t[1].to_f64() jump_date = selected
+    loaded = true redraw() compensate()
+}
+fn shift_month(delta){
+    mm += delta if mm == 0 { mm = 12 yy -= 1 } if mm == 13 { mm = 1 yy += 1 }
+    if yy < 1970 { yy = 1970 mm = 1 } if yy > 2100 { yy = 2100 mm = 12 }
+    selected = date_text(yy,mm,1) jump_date = selected message = "已切换至 " + yy + " 年 " + mm + " 月" redraw()
+}
+fn jump(){
+    if !valid_date(jump_date) { message = "请输入有效日期 YYYY-MM-DD（1970–2100）" refresh_status() return }
+    selected = jump_date let t = selected.split("-") yy = t[0].to_f64() mm = t[1].to_f64() message = "已选择 " + selected redraw()
+}
+fn pick_day(n){ if n < 1 || n > month_days(yy,mm) { return } selected = date_text(yy,mm,n) jump_date = selected page_offset = 0 redraw() }
+fn day_label(n){ if n < 1 || n > month_days(yy,mm) { return " " } if selected == date_text(yy,mm,n) { return "·" + n } return "" + n }
+fn visible_record(r){
+    if r.kind == "period" && (!db.period_enabled || db.private_hidden) { return false }
+    if active_flow != "" { return member(r,active_flow) }
+    if screen == "calendar" { for f in db.flows { if !f.hidden && member(r,f.id) { return true } } return false } return true
+}
+fn ordered_records(){
+    let out = [] for r in db.records {
+        let include = visible_record(r)
+        if screen == "calendar" && r.date != selected { include = false }
+        if screen == "records" && module_filter != "all" && r.kind != module_filter { include = false }
+        if include { out.push({record: r day: epoch_day(r.date)}) }
     }
+    for i in out.len() { let j = i while j > 0 { if out[j-1].day <= out[j].day { break } let temp = out[j-1] out[j-1] = out[j] out[j] = temp j -= 1 } } let result = [] for item in out { result.push(item.record) } return result
+}
+fn new_record(k){
+    edit_id = "" edit_revision = 0 draft_kind = k draft_title = "" draft_date = selected draft_value = "" draft_end = "" draft_source = "" draft_time = "09:00"
+    message = "新增" + kind_name(k) + "：填写实际记录；任务填写计划时间。"
+    if k == "period" && !db.period_enabled { message = "请先在设置主动启用经期模块。" go("settings") return } go("edit")
+}
+fn open_record(id){
+    let r = find_record(id) if r == nil { message = "该记录已删除。" go("records") return }
+    edit_id = r.id edit_revision = r.revision draft_kind = r.kind draft_title = r.title draft_date = r.date draft_value = money(r.cents) draft_end = r.end_date draft_source = r.source draft_time = "09:00"
+    if r.kind == "task" { let t = local_time(r.due_at + 28800) draft_time = pad(t.hour) + ":" + pad(t.minute) }
+    message = "已打开" + kind_name(r.kind) + "详情 · " + r.id go("edit")
+}
+fn save_record(){
+    if !valid_date(draft_date) { message = "日期无效，未保存。" refresh_status() return }
+    if draft_kind == "period" && !db.period_enabled { message = "经期模块未启用，未保存。" refresh_status() return }
+    if draft_kind != "task" && epoch_day(draft_date) > epoch_day(today()) { message = "未来计划请创建任务，不能记录为已发生。" refresh_status() return }
+    let cents = 0 if draft_kind == "expense" { cents = amount_cents(draft_value.trim()) if cents <= 0 { message = "金额须大于 0，最多两位小数。" refresh_status() return } }
+    if draft_kind == "period" {
+        if draft_end != "" { if !valid_date(draft_end) { message = "结束日期无效。" refresh_status() return } if epoch_day(draft_end) < epoch_day(draft_date) || epoch_day(draft_end) > epoch_day(today()) { message = "结束日期必须为开始后已发生的日期。" refresh_status() return } }
+        if draft_title.trim() == "" { draft_title = "经期开始" }
+    }
+    if draft_title.trim() == "" || draft_title.len() > 180 { message = "请填写标题 / 备注（1–180 字）。" refresh_status() return }
+    if draft_kind == "news" && (draft_source.trim() == "" || draft_source.len() > 500) { message = "请填写来源（地址或出处，最多 500 字）。" refresh_status() return }
+    let due = 0 if draft_kind == "task" {
+        if !regex("^[0-9]{2}:[0-9]{2}$", "").test(draft_time) { message = "时间请用 HH:MM。" refresh_status() return }
+        let parts = draft_time.split(":") let h = parts[0].to_f64() let m = parts[1].to_f64()
+        if h > 23 || m > 59 { message = "时间无效，未保存。" refresh_status() return }
+        due = epoch_day(draft_date) * 86400 + h * 3600 + m * 60 - 28800
+    }
+    for r in db.records { if r.id != edit_id && r.kind == draft_kind {
+        let duplicate = r.date == draft_date && r.title == draft_title.trim()
+        if draft_kind == "expense" { duplicate = duplicate && r.cents == cents }
+        if draft_kind == "news" { duplicate = duplicate && r.source == draft_source.trim() }
+        if draft_kind == "task" { duplicate = duplicate && r.due_at == due }
+        if draft_kind == "period" {
+            duplicate = r.date == draft_date let old_end = 999999 let new_end = 999999
+            if r.end_date != "" { old_end = epoch_day(r.end_date) } if draft_end != "" { new_end = epoch_day(draft_end) }
+            if epoch_day(r.date) <= new_end && epoch_day(draft_date) <= old_end { duplicate = true }
+        }
+        if duplicate { message = "已存在相同或重叠记录，未重复保存；请打开原记录更正。" refresh_status() return }
+    } }
+    let c = clone_db() let current = nil for r in c.records { if r.id == edit_id { current = r } }
+    if edit_id != "" && (current == nil || current.revision != edit_revision) { message = "记录已变化，请重新打开后编辑。" refresh_status() return }
+    if current == nil {
+        if c.records.len() >= 800 { message = "本版最多 800 条，请先导出。" refresh_status() return } c.seq += 1
+        current = {id: "r" + c.seq kind: draft_kind revision: 0 title: "" date: "" end_date: "" cents: 0 source: "" due_at: 0 completed_at: 0 reminded_due: 0 status: "recorded" created_at: time_now() updated_at: time_now() flow_ids: []}
+        if active_flow != "" { current.flow_ids.push(active_flow) } if draft_kind == "task" { current.status = "pending" } c.records.push(current)
+    }
+    current.revision += 1 current.updated_at = time_now() current.title = draft_title.trim() current.date = draft_date current.end_date = draft_end current.cents = cents current.source = draft_source.trim()
+    if current.due_at != due { current.reminded_due = 0 for a in c.alerts { if a.record_id == current.id { a.active = false } } }
+    current.due_at = due check_rules(c)
+    if persist(c) { last_saved = current.id edit_id = current.id edit_revision = current.revision message = "已保存 · " + summary(current) redraw() }
+}
+fn task_action(action){
+    let c = clone_db() let found = false
+    for r in c.records { if r.id == edit_id && r.kind == "task" { found = true r.status = action r.revision += 1 r.updated_at = time_now() r.completed_at = 0 if action == "done" { r.completed_at = time_now() } if action == "pending" { r.reminded_due = 0 } } }
+    if !found { return } for a in c.alerts { if a.record_id == edit_id { a.active = false } } check_rules(c)
+    if persist(c) { open_record(edit_id) message = "任务状态已保存：" + task_status(action) refresh_status() }
+}
+fn postpone(){ if edit_id == "" { return } let r = find_record(edit_id) let next = local_time(r.due_at + 115200) draft_date = date_text(next.year,next.month,next.day) save_record() }
+fn delete_record(){
+    if edit_id == "" { return }
+    if !delete_armed { delete_armed = true message = "再次点击确认删除源记录及其所有 Flow 展示。" redraw() return }
+    let c = clone_db() let kept = [] for r in c.records { if r.id != edit_id { kept.push(r) } } c.records = kept
+    for a in c.alerts { if a.record_id == edit_id { a.active = false } } check_rules(c)
+    if persist(c) { edit_id = "" message = "源记录已删除，关联展示与任务提醒已撤下。" go("records") }
+}
+fn create_flow(){
+    let name = draft_flow.trim() if name == "" || name.len() > 60 { message = "Flow 名称须为 1–60 字。" refresh_status() return }
+    for f in db.flows { if f.name == name { message = "已有同名 Flow。" refresh_status() return } }
+    let c = clone_db() if c.flows.len() >= 80 { return } c.seq += 1 let id = "f" + c.seq c.flows.push({id: id name: name hidden: false created_at: time_now()})
+    if persist(c) { active_flow = id draft_flow = "" message = "Flow 已创建" redraw() }
+}
+fn toggle_member(fid){
+    let c = clone_db()
+    for r in c.records { if r.id == edit_id { let kept = [] let existed = false for f in r.flow_ids { if f == fid { existed = true } else { kept.push(f) } } if !existed { kept.push(fid) } r.flow_ids = kept r.revision += 1 r.updated_at = time_now() } }
+    if persist(c) { open_record(edit_id) message = "关联已更新；源记录仍只有一份。" refresh_status() }
+}
+fn flow_action(action){
+    if active_flow == "" { return }
+    if action == "rename" {
+        if draft_flow.trim() == "" || draft_flow.len() > 60 { message = "Flow 名称须为 1–60 字。" refresh_status() return }
+        for f in db.flows { if f.id != active_flow && f.name == draft_flow.trim() { message = "已有同名 Flow。" refresh_status() return } }
+    }
+    if action == "delete" && !delete_armed { delete_armed = true message = "再次点击删除 Flow；源记录和其他组会保留。" redraw() return }
+    let c = clone_db() let kept = []
+    for f in c.flows {
+        if f.id == active_flow { if action == "hide" { f.hidden = !f.hidden } if action == "rename" { if draft_flow.trim() == "" { return } f.name = draft_flow.trim() } }
+        if f.id != active_flow || action != "delete" { kept.push(f) }
+    } c.flows = kept
+    if action == "delete" { for r in c.records { if member(r,active_flow) { let ids = [] for f in r.flow_ids { if f != active_flow { ids.push(f) } } r.flow_ids = ids r.revision += 1 r.updated_at = time_now() } } }
+    if persist(c) { if action == "delete" { active_flow = "" } message = "Flow 已更新；源记录保留。" delete_armed = false redraw() }
+}
+fn toggle_setting(key){ let c = clone_db() c[key] = !c[key] if persist(c) { message = "设置已保存。" redraw() } }
+fn set_budget(){ let n = amount_cents(draft_value.trim()) if n < 0 { message = "预算金额无效。" refresh_status() return } let c = clone_db() c.budget_cents = n check_rules(c) if persist(c) { message = "月预算已保存；0 表示关闭。" redraw() } }
+fn dismiss(key){ let c = clone_db() for a in c.alerts { if a.key == key { a.active = false } } if persist(c) { message = "提醒已读，去重记录保留。" redraw() } }
+fn export_backup(){
+    if locked { message = "数据损坏保护中，未导出空数据。" refresh_status() return }
+    let text = db.to_json() let success = write_checked("backup.json",text)
+    if !success { message = "导出失败。" refresh_status() return } if fs.read("backup.json") != text { message = "备份读回失败。" refresh_status() return }
+    let events = [] for r in db.records { events.push(event_of(r)) } write_checked("events-export.json",events.to_json())
+    message = "已导出并校验 backup.json（数据目录内）。" refresh_status()
+}
+fn restore_backup(){
+    if !fs.exists("backup.json") { message = "未找到 backup.json。" refresh_status() return }
+    let c = read_json("backup.json") if !valid_db(c) { message = "备份格式或引用无效，未恢复。" refresh_status() return }
+    if !restore_armed { restore_armed = true message = "再次点击确认用备份替换当前数据；先保留恢复前副本。" redraw() return }
+    if !write_checked("before-restore.json",db.to_json()) { message = "无法备份当前数据，恢复已取消。" refresh_status() return }
+    let was_locked = locked locked = false c.seq = max(c.seq,db.seq)
+    if persist(c) { active_flow = "" restore_armed = false message = "恢复完成；记录、关联和提醒去重状态已读回。" redraw() compensate() } else { locked = was_locked }
+}
+fn migrate_legacy(){
+    if !fs.exists("expenses.json") { message = "没有旧账本。" refresh_status() return }
+    let old = read_json("expenses.json") if !old.is_array() { message = "旧账本无效，未导入。" refresh_status() return }
+    let c = clone_db() let added = 0
+    for item in old {
+        if !valid_date(item.date) || !(item.amount > 0) || !item.note.is_string() { message = "旧账本含无效记录，整次导入取消。" refresh_status() return }
+        let id = "legacy-" + item.id let exists = false for r in c.records { if r.id == id { exists = true } }
+        if !exists { c.records.push({id: id kind: "expense" revision: 1 title: item.note date: item.date end_date: "" cents: round(item.amount * 100) source: "legacy expenses.json" due_at: 0 completed_at: 0 reminded_due: 0 status: "recorded" created_at: time_now() updated_at: time_now() flow_ids: []}) added += 1 }
+    } check_rules(c) if persist(c) { message = "已导入 " + added + " 条；旧文件未改动。" redraw() }
+}
+fn send_model(){
+    if busy || chat_text.trim() == "" { return } busy = true request_serial += 1 let serial = request_serial
+    chat_result = "正在请求真实模型；尚未保存任何记录。" redraw()
+    host.request("model.complete", {
+        task: "Extract one unambiguous personal actual expense, period start or planned task. Never treat plans or others' spending as own expense. If ambiguous ask a question. Return kind (expense/period/task/clarify), title, date YYYY-MM-DD, amount decimal string, time HH:MM, question. Do not invent dates or times."
+        input: {text: chat_text today: today() timezone: "Asia/Shanghai"}
+        schema: {type: "object" additionalProperties: false required: ["kind" "title" "date" "amount" "time" "question"] properties: {kind: {type: "string"} title: {type: "string"} date: {type: "string"} amount: {type: "string"} time: {type: "string"} question: {type: "string"}}} class: "fast"
+    }, fn(r){
+        if serial != request_serial { return } busy = false
+        if !r.is_ok { chat_result = "模型不可用，未保存：" + r.error fs.write("model-last-error.json",{error: r.error granted: host.capabilities() at: time_now()}.to_json()) if screen == "chat" { redraw() } return }
+        chat_result = "模型候选（自动写入路径尚未验证）：" + r.data.output.to_json() + "。请使用手工卡片核对保存。" if screen == "chat" { redraw() }
+    })
+    start_timeout(30, || { if busy && serial == request_serial { busy = false request_serial += 1 chat_result = "模型请求超时，未保存；输入仍保留。" if screen == "chat" { redraw() } } })
+}
+start_timeout(0.08, || boot())
+start_interval(20, || compensate())
+
+SolidView{width: Fill height: Fill flow: Down padding: 14 spacing: 8 draw_bg.color: #xf7fafb
+    Label{text: "DailyFlow" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 26}}
+    View{width: Fill height: 36 flow: Right spacing: 3
+        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "日历" on_click: || navigate("calendar")}
+        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "Flow" on_click: || navigate("flows")}
+        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "记录" on_click: || { active_flow = "" navigate("records") }}
+        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "对话" on_click: || navigate("chat")}
+        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "提醒" on_click: || navigate("alerts")}
+        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "设置" on_click: || navigate("settings")}
+    }
+    status := Label{width: Fill text: "读取中" draw_text.color: accent draw_text.text_style.font_size: 12}
+    page := ScrollYView{width: Fill height: Fill flow: Down spacing: 9 on_render: || {
+        if screen == "calendar" {
+            Label{text: "" + yy + " 年 " + mm + " 月" draw_text.color: ink draw_text.text_style.font_size: 23}
+            View{width: Fill height: 36 flow: Right spacing: 5
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "‹ 上月" on_click: || shift_month(-1)}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "今天" on_click: || { jump_date = today() jump() }}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "下月 ›" on_click: || shift_month(1)}
+            }
+            date_jump := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 36 text: jump_date empty_text: "跳至 YYYY-MM-DD" on_change: |v| { jump_date = v } on_return: |v| jump()}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "跳转日期" on_click: || jump()}
+            View{width: Fill height: 22 flow: Right
+                for day in ["一" "二" "三" "四" "五" "六" "日"] { Label{width: Fill text: day draw_text.color: muted} }
+            }
+            let offset = (epoch_day(date_text(yy,mm,1)) + 3) % 7
+            for row in 6 {
+                View{width: Fill height: 34 flow: Right spacing: 3
+                    for col in 7 {
+                        let n = row * 7 + col - offset + 1
+                        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill height: 34 text: day_label(n) on_click: || pick_day(n)}
+                    }
+                }
+            }
+            Label{width: Fill text: selected + " · 支出 ¥" + money(total_day(selected)) draw_text.color: ink draw_text.text_style.font_size: 16}
+            Label{width: Fill text: "视角：" + flow_name(active_flow) + " · 默认仅显示可见 Flow" draw_text.color: muted draw_text.text_style.font_size: 12}
+            View{width: Fill height: 36 flow: Right spacing: 4
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 记账" on_click: || new_record("expense")}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 任务" on_click: || new_record("task")}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 经期" on_click: || new_record("period")}
+            }
+        }
+        if screen == "flows" {
+            Label{text: "Flow · 把相关的事放在一起" draw_text.color: ink draw_text.text_style.font_size: 19}
+            flow_input := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 38 text: draft_flow empty_text: "新 Flow 名称 / 重命名" on_change: |v| { draft_flow = v }}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "创建 Flow" on_click: || create_flow()}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "查看全部记录" on_click: || { active_flow = "" redraw() }}
+            for f in db.flows { let label = f.name if f.hidden { label += "（日历隐藏）" } ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: label on_click: || { active_flow = f.id delete_armed = false page_offset = 0 redraw() }} }
+            Label{width: Fill text: "当前：" + flow_name(active_flow) + " · 支出 ¥" + money(total_flow(active_flow)) draw_text.color: accent}
+            if active_flow != "" {
+                View{width: Fill height: 36 flow: Right spacing: 4
+                    ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "显示 / 隐藏" on_click: || flow_action("hide")}
+                    ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "重命名" on_click: || flow_action("rename")}
+                    ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "删除 Flow" on_click: || flow_action("delete")}
+                }
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "导入新闻节点" on_click: || new_record("news")}
+            }
+        }
+        if screen == "records" {
+            Label{text: "专业记录 · 原始数据" draw_text.color: ink draw_text.text_style.font_size: 21}
+            View{width: Fill height: 36 flow: Right spacing: 4
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "全部" on_click: || { module_filter = "all" page_offset = 0 redraw() }}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "账本" on_click: || { module_filter = "expense" page_offset = 0 redraw() }}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "任务" on_click: || { module_filter = "task" page_offset = 0 redraw() }}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "经期" on_click: || { module_filter = "period" page_offset = 0 redraw() }}
+            }
+            View{width: Fill height: 36 flow: Right spacing: 4
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 记账" on_click: || new_record("expense")}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 任务" on_click: || new_record("task")}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 经期" on_click: || new_record("period")}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "+ 新闻" on_click: || new_record("news")}
+            }
+            Label{text: "本月支出 ¥" + money(total_month(month_of(today()))) draw_text.color: accent}
+        }
+        if screen == "calendar" || screen == "flows" || screen == "records" {
+            let rows = ordered_records()
+            if rows.len() == 0 { Label{width: Fill text: "暂无可见记录。可新建记录，再关联 Flow。" draw_text.color: muted} }
+            for i in rows.len() { if i >= page_offset && i < page_offset + 12 {
+                let r = rows[i] ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill height: Fit text: r.date + "  " + summary(r) on_click: || open_record(r.id)}
+            } }
+            if rows.len() > 12 { View{width: Fill height: 36 flow: Right spacing: 8
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "上一页" on_click: || { page_offset = max(0,page_offset - 12) redraw() }}
+                ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "下一页" on_click: || { if page_offset + 12 < rows.len() { page_offset += 12 } redraw() }}
+            } }
+        }
+        if screen == "edit" {
+            Label{text: kind_name(draft_kind) + " · 详情与编辑" draw_text.color: ink draw_text.text_style.font_size: 22}
+            Label{text: "日期 YYYY-MM-DD（任务为到期日期）" draw_text.color: muted}
+            record_date := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 38 text: draft_date on_change: |v| { draft_date = v }}
+            record_title := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 42 text: draft_title empty_text: "标题 / 备注" on_change: |v| { draft_title = v }}
+            if draft_kind == "expense" {
+                Label{text: "金额（元，精确到分）" draw_text.color: muted}
+                record_amount := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 38 text: draft_value empty_text: "例如 32.50" on_change: |v| { draft_value = v }}
+            }
+            if draft_kind == "period" {
+                Label{width: Fill text: "结束日可留空；仅记录实际情况，不预测。" draw_text.color: muted}
+                record_end := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 38 text: draft_end empty_text: "结束日期（可选）" on_change: |v| { draft_end = v }}
+            }
+            if draft_kind == "task" {
+                Label{text: "到期时间 HH:MM · Asia/Shanghai" draw_text.color: muted}
+                record_time := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 38 text: draft_time on_change: |v| { draft_time = v }}
+            }
+            if draft_kind == "news" {
+                Label{text: "来源地址或出处（人工导入，不自动抓取）" draw_text.color: muted}
+                record_source := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 60 text: draft_source empty_text: "原文地址 / 出版信息" on_change: |v| { draft_source = v }}
+                Label{width: Fill text: "来源：" + draft_source draw_text.color: ink}
+            }
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "保存记录" on_click: || save_record()}
+            if edit_id != "" {
+                let rec = find_record(edit_id) if rec != nil {
+                    Label{width: Fill text: "操作卡片 · " + summary(rec) draw_text.color: accent}
+                    if draft_kind == "task" { View{width: Fill height: 36 flow: Right spacing: 4
+                        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "完成" on_click: || task_action("done")}
+                        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "延期一天" on_click: || postpone()}
+                        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "取消任务" on_click: || task_action("cancelled")}
+                        ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "重新待办" on_click: || task_action("pending")}
+                    } }
+                    Label{text: "所属 Flow（点击加入 / 移除）" draw_text.color: muted}
+                    for f in db.flows { let label = "+ " + f.name if member(rec,f.id) { label = "✓ " + f.name } ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: label on_click: || toggle_member(f.id)} }
+                    ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "删除源记录" on_click: || delete_record()}
+                    Label{width: Fill text: "记录 " + rec.id + " · 更新于 " + stamp_text(rec.updated_at) draw_text.color: muted draw_text.text_style.font_size: 11}
+                    if rec.completed_at > 0 { Label{text: "实际完成：" + stamp_text(rec.completed_at) draw_text.color: muted} }
+                }
+            }
+        }
+        if screen == "chat" {
+            Label{text: "对话 · 记录与操作卡片" draw_text.color: ink draw_text.text_style.font_size: 22}
+            chat_input := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 80 text: chat_text empty_text: "写下发生的事或计划…" on_change: |v| { chat_text = v }}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "请求真实模型" on_click: || send_model()}
+            Label{width: Fill text: chat_result draw_text.color: accent}
+            Label{width: Fill text: "手工操作卡片 · 保存后可更正或删除" draw_text.color: muted}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "记一笔实际支出" on_click: || new_record("expense")}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "记录经期开始" on_click: || new_record("period")}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "创建宠物 / 通用待办" on_click: || new_record("task")}
+            if last_saved != "" { ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "打开最近保存的记录" on_click: || open_record(last_saved)} }
+        }
+        if screen == "alerts" {
+            Label{text: "提醒收件箱" draw_text.color: ink draw_text.text_style.font_size: 22}
+            Label{width: Fill text: "运行中每 20 秒检查；关闭期间不会唤醒。重开后补偿并去重。" draw_text.color: muted}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "立即检查" on_click: || { compensate() redraw() }}
+            Label{width: Fill text: "本月 ¥" + money(total_month(month_of(today()))) + " / 预算 ¥" + money(db.budget_cents) draw_text.color: accent}
+            let count = 0 for a in db.alerts { if a.active {
+                count += 1 Label{width: Fill text: a.text draw_text.color: ink}
+                View{width: Fill height: 36 flow: Right spacing: 8
+                    ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "打开" on_click: || { if a.record_id == "" { active_flow = "" module_filter = "expense" go("records") } else { open_record(a.record_id) } }}
+                    ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "已读" on_click: || dismiss(a.key)}
+                }
+            } } if count == 0 { Label{text: "暂无待处理提醒。" draw_text.color: muted} }
+        }
+        if screen == "settings" {
+            Label{text: "设置与本地数据" draw_text.color: ink draw_text.text_style.font_size: 22}
+            let enabled = "关闭" if db.period_enabled { enabled = "开启" } let hidden = "隐藏" if !db.private_hidden { hidden = "显示" }
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "经期模块：" + enabled + "（点击切换）" on_click: || toggle_setting("period_enabled")}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} width: Fill text: "敏感记录：" + hidden + "（点击切换）" on_click: || toggle_setting("private_hidden")}
+            Label{text: "月预算（元，0 关闭）" draw_text.color: muted}
+            budget_input := TextInput{draw_bg +: {color: #xe8f1f5 color_hover: #xe8f1f5 color_focus: #xffffff color_empty: #xe8f1f5} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 38 text: draft_value empty_text: money(db.budget_cents) on_change: |v| { draft_value = v }}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "保存月预算" on_click: || set_budget()}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "导出备份" on_click: || export_backup()}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "恢复 backup.json" on_click: || restore_backup()}
+            ButtonFlat{draw_bg +: {color: #xe8f1f5 color_hover: #xd2e6ed color_down: #xb8d9e5 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} text: "导入旧 expenses.json（去重）" on_click: || migrate_legacy()}
+            Label{width: Fill text: "数据仅存本机沙盒。导出 backup.json；恢复会替换数据并保留 before-restore.json。" draw_text.color: muted}
+            Label{width: Fill text: "时间按 Asia/Shanghai（UTC+8）；日期范围 1970–2100。" draw_text.color: muted}
+            Label{width: Fill text: "已保存 " + db.records.len() + " 条 / " + db.flows.len() + " 个 Flow · 修订 " + db.revision draw_text.color: accent}
+        }
+    }}
 }
