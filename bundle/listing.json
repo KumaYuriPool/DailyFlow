@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "subtitle": "用日历组织每天的生活记录",
-  "description": "DailyFlow 单 App 时间 Flow 验证版：真实月历、Flow 关联、手工记账/经期/任务/新闻记录、预算提醒、应用运行时到期检查和重开补偿、本地备份恢复。当前 Windows card-host 不提供模型服务，AI 自动记录未完成；不支持关闭应用后的后台唤醒。",
+  "subtitle": "说一件事，自动记录并串成 Flow",
+  "description": "DailyFlow 单 App 时间 Flow 验证版：调用宿主现有模型，明确事实自动保存，金额等信息含糊时先追问；自动创建或复用主题 Flow，以时间节点图查看和更正源记录。支持手工记账、经期、任务、新闻、本地备份与运行中提醒。真实 Windows 桌面模型路径已验收；独立 card-host 无模型，Shell Agent 跨 App 调用尚未完成联调。自动保存收据上限128条，关闭应用后不支持后台唤醒。",
   "category": "productivity",
   "keywords": [
     "calendar",
@@ -10,9 +10,9 @@
     "task"
   ],
   "screenshots": [
-    "screenshots/01-main.png",
-    "screenshots/02-flow.png",
-    "screenshots/03-model-unavailable.png"
+    "screenshots/04-auto-flow.png",
+    "screenshots/05-real-model.png",
+    "screenshots/06-real-clarification.png"
   ],
   "icon": "assets/icon.svg",
   "platforms": [
@@ -23,7 +23,7 @@
     "support": "https://example.com/support",
     "privacy_policy_url": "https://example.com/privacy"
   },
-  "release_notes": "0.2.0: unified Splash app with manual records, dynamic calendar, local persistence and in-app reminders. Real model service unavailable on tested card-host.",
+  "release_notes": "0.3.0: real host-model automatic recording, clarification, atomic Flow association, durable request receipts, app query/save tools, and a clickable chronological Flow graph. Windows local validation only; no store publication or Shell Agent end-to-end claim.",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

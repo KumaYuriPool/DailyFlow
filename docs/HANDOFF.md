@@ -4,6 +4,16 @@
 **版本**：v0.6（含 4-bundle 拆分 + iOS 极简日历 v0.5）
 **目的**：让任何接手 agent 能在 30 分钟内理解项目状态并能继续开发
 
+## 2026-10-03 单 App 0.3.0 最新交付（优先于下方历史）
+
+已完成共享业务入口、`dailyflow.query/save_record`应用工具、明确自动记录/含糊追问、自动建立或复用Flow，以及可点击的时间图。完整桌面实测3次真实Provider请求：猫粮45元→创建宠物照护；重复发送不新增；猫砂追问补充26元→复用Flow，最终2条记录合计71元。见 [0.3.0验收报告](AGENT_FLOW_ACCEPTANCE.md)。此前0.2.0的“模型不可用”仅对应独立card-host。
+
+启动：`run-dailyflow-ai.cmd`使用完整桌面和既有Provider，数据`.local-state/desktop/`；旧`run-dailyflow.cmd`仍是无模型card-host，数据`.local-state/dailyflow/`。两套数据不自动迁移。当前旧Shell不含新脚本工具桥接且未配置测试kernel，**应用内真实model.complete成功不等于Shell Agent工具全链路成功**。
+
+业务32次真实工具调用、对话12项注入集成断言+1次重启、真实Provider3次请求分层记录；最终证据位于`build/agent-flow-r1/`，不要混用早期失败探针。`tools/test_business_flow.py`提供新隔离目录复测。`ok`是Splash关键字，使用`result["ok"]`。
+
+收据上限128，满额后仅阻止新自动写入，手工仍可继续；草稿/追问不跨重启；恢复旧备份回退收据，恢复后不能盲目重投之后的未知旧请求。依然单实例双槽，不承诺跨设备同步或断电零丢失。发布、其他平台、关闭后唤醒、AppCard/glance、连续7天试用未完成。本轮产品开发仅改Splash应用和相关测试/文档，未改Shell/Rust/Provider配置或真实用户数据。
+
 ## 2026-10-02 单 App 0.2.0 最新实现（优先于下方历史）
 
 `bundle/main.splash` 已成为统一入口；运行 `run-dailyflow.cmd`。当前可手工管理真实月历、Flow、记账/经期/任务/新闻，使用预算提醒、任务运行时检查与重开补偿、双槽持久化及备份恢复。真实点击、控件树、文件与截图证据见 [MVP 验收报告](MVP_ACCEPTANCE_REPORT.md)；操作见 [USER_GUIDE](USER_GUIDE.md)，数据字段和一致性边界见 [DATA_PROTOCOL](DATA_PROTOCOL.md)。

@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "tools": [
+    {
+      "name": "dailyflow.query",
+      "description": "Query personal DailyFlow records and visible Flow names. Hidden private period records are omitted. Use explicit filters; does not expose receipts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "flow_name": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": true,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.save_record",
+      "description": "Save one explicit actual expense/period/news or planned task and its explicitly requested Flow names atomically. Never invent missing facts. Clarify ambiguity first. Create with record_id empty and expected_revision 0. Updates require current ID/revision and explicit user correction. Stable request_id must be reused only with identical content; no automatic retry after unknown outcome. Local ledger only; does not spend money.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "expense",
+              "period",
+              "task",
+              "news"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "flow_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "user_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "request_id",
+          "record_id",
+          "kind",
+          "title",
+          "date",
+          "amount",
+          "time",
+          "end_date",
+          "source",
+          "expected_revision",
+          "flow_names",
+          "user_tags"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "ok",
+          "record_id",
+          "flow_ids",
+          "message",
+          "replayed"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "flow_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "risk": "act",
+      "shareable": true,
+      "private_data": true,
+      "implemented_by": "app"
+    }
+  ]
+}

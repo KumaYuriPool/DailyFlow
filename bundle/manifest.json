@@ -1,13 +1,27 @@
 {
+  "agent": {
+    "instructions": "AGENT.md",
+    "model": {
+      "needs": [
+        "tool_calling",
+        "multilingual"
+      ]
+    },
+    "profile": "workspace-write",
+    "tools": []
+  },
   "capabilities": [
     "storage",
     "model"
   ],
   "id": "dailyflow",
   "integrity": {
-    "bundle_blake3": "c17591f7e9645f801bb6f03f5dceb8a50095b309a8a9b35a6e4a186e145ce70a"
+    "bundle_blake3": "6aa7a14d55d23e019ce153c9128fb11852cfdd4669e38416f47b1489bd2273a2"
   },
   "name": "DailyFlow",
   "schema": 1,
-  "version": "0.2.0"
+  "storage": {
+    "agent_workspace": "none"
+  },
+  "version": "0.3.0"
 }
