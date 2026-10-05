@@ -119,11 +119,15 @@ def stage_local_catalog(bundle, apps):
 
 
 class DesktopProbe:
-    def __init__(self, bundle, output, core_dir=None, binary=None):
+    def __init__(self, bundle, output, core_dir=None, binary=None, seed_state=None):
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=False)
         self.apps = self.output / "apps"
         self.app_id, self.bundle, anchor_pub = stage_local_catalog(bundle, self.apps)
+        if seed_state is not None:
+            # Explicit synthetic state only, supplied by the event acceptance harness.
+            for source in Path(seed_state).glob('state-*.json'):
+                shutil.copyfile(source, self.apps / self.app_id / source.name)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             self.port = sock.getsockname()[1]

@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import time
-from desktop_flow_probe import DesktopProbe, ROOT
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class UI:
@@ -97,6 +97,7 @@ def run(probe):
 
 
 if __name__ == '__main__':
+    from desktop_flow_probe import DesktopProbe
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle',type=Path,default=ROOT/'bundle')
     parser.add_argument('--output',type=Path,required=True)

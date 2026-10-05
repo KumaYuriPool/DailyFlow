@@ -1,0 +1,15 @@
+// Workspace column: top-level SolidView that lives outside the page body so
+// its inner for-loops (calendar grid, ledger list, event graph nodes) don't
+// compete with the page body's widget compilation budget. The widget handle
+// is exposed via `ui.workspace_col` for set_visible toggles (workspace_show
+// / workspace_hide) and for re-rendering after on_click state changes.
+//
+// Body is currently inline in src/60_ui.splash because widget id resolution
+// for `ui.workspace_col.render()` from another file is unreliable in the
+// current Splash version. When the upstream widget tree lookup supports
+// cross-file ui handle calls, move the SolidView body here and reference
+// it as a Flow.Right sibling inside the page in 60_ui.splash.
+//
+// Module-boundary reminder: must not touch the private expense arrays.
+fn workspace_show(){ ui.workspace_col.set_visible(true) }
+fn workspace_hide(){ ui.workspace_col.set_visible(false) }

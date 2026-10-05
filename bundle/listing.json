@@ -1,18 +1,18 @@
 {
   "schema": 1,
-  "subtitle": "说一件事，自动记录并串成 Flow",
-  "description": "DailyFlow 单 App 时间 Flow 验证版：调用宿主现有模型，明确事实自动保存，金额等信息含糊时先追问；自动创建或复用主题 Flow，以时间节点图查看和更正源记录。支持手工记账、经期、任务、新闻、本地备份与运行中提醒。真实 Windows 桌面模型路径已验收；独立 card-host 无模型，Shell Agent 跨 App 调用尚未完成联调。自动保存收据上限128条，关闭应用后不支持后台唤醒。",
+  "subtitle": "日历、账本与有语义的事件 Flow",
+  "description": "DailyFlow 单 App 本地验证版。普通/账本日历切换，事件事实、费用归属与明确后续计划组成事件图。统一输入自动组织明确事项、关联费用、追问歧义、更正同一源账并查询实际合计。历史个人数据保留，支持本地备份恢复。应用内模型依赖已有桌面 Provider；Shell Agent 跨 App 工具路径未验收。本版本未发布。",
   "category": "productivity",
   "keywords": [
     "calendar",
     "flow",
     "expense",
-    "task"
+    "event"
   ],
   "screenshots": [
-    "screenshots/04-auto-flow.png",
-    "screenshots/05-real-model.png",
-    "screenshots/06-real-clarification.png"
+    "screenshots/01-calendar.png",
+    "screenshots/02-ledger.png",
+    "screenshots/03-event-flow.png"
   ],
   "icon": "assets/icon.svg",
   "platforms": [
@@ -23,7 +23,7 @@
     "support": "https://example.com/support",
     "privacy_policy_url": "https://example.com/privacy"
   },
-  "release_notes": "0.3.0: real host-model automatic recording, clarification, atomic Flow association, durable request receipts, app query/save tools, and a clickable chronological Flow graph. Windows local validation only; no store publication or Shell Agent end-to-end claim.",
+  "release_notes": "0.4.0: one app with expense/calendar protocol boundaries, semantic event facts/expenses/plans, typed relations, automatic association/correction/query, protected migration and isolated Windows acceptance. Local only; no publication.",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

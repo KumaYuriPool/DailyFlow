@@ -1,0 +1,50 @@
+// Flow owns typed relations and references; all source mutations use module APIs.
+fn flow_catalog(c){
+    let out = [] let sources = source_snapshot(c)
+    for f in c.flows { if !f.hidden { let visible = business_optional(f,"event_flow",false) for e in sources { if e.operation == "upsert" && member(e,f.id) { visible = true } } if visible { out.push(f.to_json().parse_json()) } } } return out
+}
+fn flow_name(id){ for f in flow_catalog(db) { if f.id == id { return f.name } } return "全部事件" }
+fn flow_resolve(c,subject,topic,fid){
+    let matches = []
+    for f in flow_catalog(c) {
+        if fid != "" { if f.id == fid { matches.push(f) } }
+        else { if subject != "" && business_optional(f,"subject","") == subject && (topic == "" || business_optional(f,"topic","") == topic) { matches.push(f) } }
+    }
+    if matches.len() > 1 { return business_error("有多个匹配事件，请明确属于哪一个。") }
+    if matches.len() == 1 { return {"ok": true flow_id: matches[0].id} }
+    if fid != "" { return business_error("事件不存在，请重新选择。") }
+    if subject == "" || topic == "" { return {"ok": true flow_id: ""} }
+    if c.flows.len() >= 80 { return business_error("事件数量已达上限，请先导出。") }
+    let id = new_id(c,"f") c.flows.push({id: id name: subject + " · " + topic subject: subject topic: topic revision: 1 hidden: false event_flow: true created_at: time_now()})
+    return {"ok": true flow_id: id}
+}
+fn flow_relations(c){ return business_optional(c,"relations",[]) }
+fn relation_add(c,fid,kind,from,to,evidence){
+    if fid == "" { return }
+    c.relations = business_optional(c,"relations",[])
+    for r in c.relations { if r.flow_id == fid && r.type == kind && r.from_node == from && r.to_node == to { return } }
+    c.relations.push({flow_id: fid type: kind from_node: from to_node: to evidence: "user" evidence_payload: evidence})
+}
+fn flow_link(c,id,fid){ if fid == "" { return } expense_membership(c,id,fid,true) calendar_membership(c,id,fid,true) relation_add(c,fid,"belongs_to",id,fid,"明确主体与事项或用户所选事件") }
+fn flow_unlink(c,id,fid){
+    expense_membership(c,id,fid,false) calendar_membership(c,id,fid,false)
+    let kept = [] for r in flow_relations(c) { if !(r.flow_id == fid && (r.from_node == id || r.to_node == id)) { kept.push(r) } } c.relations = kept
+}
+fn flow_drop_source(c,id){ let kept = [] for r in flow_relations(c) { if r.from_node != id && r.to_node != id { kept.push(r) } } c.relations = kept }
+fn flow_expense_attached(id,fid){ for r in flow_relations(db) { if r.type == "expense_for" && r.to_node == id && (fid == "" || r.flow_id == fid) { return true } } return false }
+fn flow_expense_on_day(id,fid,day){ for r in flow_relations(db) { if r.type == "expense_for" && r.to_node == id && (fid == "" || r.flow_id == fid) { let event = calendar_get(r.from_node) if event != nil && event.date == day { return true } } } return false }
+fn graph_node_label(graph,id){ let index = 0 for node in graph.nodes { if node.source_module == "calendar" { index += 1 if node.source_record_id == id { return "" + index + " · " + node.summary } } } return "事项" }
+fn flow_plan_fulfilled(id){ for rel in flow_relations(db) { if rel.type == "fulfills" && rel.to_node == id { return true } } return false }
+fn flow_query(id){
+    let nodes = [] let edges = [] let amount = 0 let plans = 0
+    for e in source_snapshot(db) { if e.operation == "upsert" && member(e,id) { nodes.push(e) if e.source_module == "expense" { amount += e.amount_minor } if e.source_module == "calendar" && e.status == "planned" && !flow_plan_fulfilled(e.source_record_id) { plans += 1 } } }
+    for i in nodes.len() { let j = i while j > 0 { if epoch_day(nodes[j-1].date) <= epoch_day(nodes[j].date) { break } let t = nodes[j-1] nodes[j-1] = nodes[j] nodes[j] = t j -= 1 } }
+    for r in flow_relations(db) { if r.flow_id == id { edges.push(r) } }
+    return {"ok": true flow_id: id name: flow_name(id) nodes: nodes relations: edges amount_minor: amount plans: plans currency: "CNY"}
+}
+fn flow_delete(c,fid){
+    for e in source_snapshot(c) { if e.operation == "upsert" && member(e,fid) { flow_unlink(c,e.source_record_id,fid) } }
+    // Retain the historical container identity: archived records can still reference it.
+    for f in c.flows { if f.id == fid { f.hidden = true f.event_flow = false } }
+    let rel = [] for r in flow_relations(c) { if r.flow_id != fid { rel.push(r) } } c.relations = rel
+}

@@ -1,0 +1,39 @@
+// Expense module owns db.records. Legacy non-expense records never leave this boundary.
+fn expense_snapshot(c){ let out = [] for r in c.records { if r.kind == "expense" { let item = r.to_json().parse_json() item.amount_minor = r.cents item.currency = "CNY" item.record_id = r.id out.push(item) } } return out }
+fn expense_get(id){ for r in expense_snapshot(db) { if r.id == id { return r } } return nil }
+fn new_id(c,prefix){ c.seq += 1 return prefix + c.seq }
+fn source_base(c,kind){ return {id: new_id(c,"r") kind: kind revision: 0 title: "" date: "" end_date: "" cents: 0 source: "" due_at: 0 completed_at: 0 reminded_due: 0 status: "recorded" created_at: time_now() updated_at: time_now() flow_ids: [] user_tags: []} }
+fn expense_write(c,a){
+    if !valid_date(a.date) || epoch_day(a.date) > epoch_day(today()) { return business_error("支出必须是有效的已发生日期。") }
+    let cents = amount_cents(a.amount) if cents <= 0 { return business_error("请补充准确金额（元，最多两位小数）。") }
+    if a.title.trim() == "" || a.title.len() > 180 { return business_error("请填写支出事项。") }
+    let current = nil for r in c.records { if r.id == a.record_id && r.kind == "expense" { current = r } }
+    if a.record_id != "" && (current == nil || current.revision != a.expected_revision) { return business_error("账目已变化，请重新查询。") }
+    if current == nil {
+        if a.expected_revision != 0 || c.records.len() >= 800 { return business_error("新账目修订或容量无效。") }
+        current = source_base(c,"expense") c.records.push(current)
+    }
+    current.title = a.title.trim() current.date = a.date current.cents = cents current.revision += 1 current.updated_at = time_now()
+    current.user_tags = business_optional(a,"user_tags",[]) let category = business_optional(a,"category","") if category != "" { current.category = category } else { current.category = business_optional(current,"category","") }
+    return {"ok": true record_id: current.id message: "账目已校验"}
+}
+fn expense_remove(c,id,revision){
+    let kept = [] let removed = nil for r in c.records { if r.id == id && r.kind == "expense" { removed = r } else { kept.push(r) } }
+    if removed == nil { return business_error("账目不存在。") } if removed.revision != revision { return business_error("账目已变化，请重新查询。") }
+    c.records = kept tombstone_add(c,"expense",id,revision + 1) return {"ok": true record_id: id}
+}
+fn expense_membership(c,id,fid,link){
+    for r in c.records { if r.kind == "expense" && r.id == id {
+        let ids = [] for old in r.flow_ids { if old != fid { ids.push(old) } } if link { ids.push(fid) }
+        if ids.to_json() != r.flow_ids.to_json() { r.flow_ids = ids r.revision += 1 r.updated_at = time_now() }
+    } }
+}
+fn expense_import(){
+    let old = read_json("expenses.json") if old == nil || !old.is_array() { message = "旧账本无效或不存在。" redraw() return }
+    let c = clone_db() let added = 0
+    for item in old {
+        if !valid_date(item.date) || !(item.amount > 0) || !item.note.is_string() { message = "旧账本无效，整次导入取消。" redraw() return }
+        let id = "legacy-" + item.id let exists = false for r in c.records { if r.id == id { exists = true } }
+        if !exists { let r = source_base(c,"expense") r.id = id r.revision = 1 r.date = item.date r.title = item.note r.cents = round(item.amount * 100) c.records.push(r) added += 1 }
+    } if persist(c) { message = "已导入 " + added + " 条，旧文件保留。" redraw() }
+}

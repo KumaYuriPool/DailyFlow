@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "subtitle": "说一件事，自动记录并串成 Flow",
+  "description": "DailyFlow 单 App 时间 Flow 验证版：调用宿主现有模型，明确事实自动保存，金额等信息含糊时先追问；自动创建或复用主题 Flow，以时间节点图查看和更正源记录。支持手工记账、经期、任务、新闻、本地备份与运行中提醒。真实 Windows 桌面模型路径已验收；独立 card-host 无模型，Shell Agent 跨 App 调用尚未完成联调。自动保存收据上限128条，关闭应用后不支持后台唤醒。",
+  "category": "productivity",
+  "keywords": [
+    "calendar",
+    "flow",
+    "expense",
+    "task"
+  ],
+  "screenshots": [
+    "screenshots/04-auto-flow.png",
+    "screenshots/05-real-model.png",
+    "screenshots/06-real-clarification.png"
+  ],
+  "icon": "assets/icon.svg",
+  "platforms": [
+    "windows"
+  ],
+  "publisher": {
+    "name": "Replace with your publisher name",
+    "support": "https://example.com/support",
+    "privacy_policy_url": "https://example.com/privacy"
+  },
+  "release_notes": "0.3.0: real host-model automatic recording, clarification, atomic Flow association, durable request receipts, app query/save tools, and a clickable chronological Flow graph. Windows local validation only; no store publication or Shell Agent end-to-end claim.",
+  "age_rating": "all",
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,201 @@
+// DailyFlow: all business operations and persistence run in OctoScript/Splash.
+let db = {schema_version: 1 revision: 0 seq: 0 records: [] flows: [] alerts: [] budget_cents: 0 budget_month: "" budget_notified: false period_enabled: false private_hidden: true}
+let screen = "home"
+let message = "读取本地数据"
+let yy = 2026
+let mm = 10
+let selected = ""
+let active_flow = ""
+let module_filter = "all"
+let edit_id = ""
+let edit_revision = 0
+let draft_kind = "expense"
+let draft_title = ""
+let draft_date = ""
+let draft_value = ""
+let draft_end = ""
+let draft_source = ""
+let draft_time = ""
+let draft_flow = ""
+let jump_date = ""
+let chat_text = ""
+let chat_result = "说一件事：明确的信息会自动保存；不确定的地方会先问你。"
+let chat_state = "idle"
+let chat_turns = []
+let chat_submission = ""
+let chat_request_id = ""
+let chat_request_counter = 0
+let chat_candidate = nil
+let chat_question = ""
+let busy = false
+let request_serial = 0
+let last_saved = ""
+let restore_armed = false
+let delete_armed = false
+let locked = false
+let loaded = false
+let page_offset = 0
+let app_current = "calendar"
+let workspace_open = true
+let workspace_view = "calendar"
+let dropdown_open = ""
+let dropdown_query = ""
+let context_date = ""
+let ink = #x293a32
+let muted = #x7a847c
+let accent = #x557b60
+fn pad(n){ if n < 10 { return "0" + n } return "" + n }
+fn date_text(y,m,d){ return "" + y + "-" + pad(m) + "-" + pad(d) }
+fn leap(y){ return y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) }
+fn month_days(y,m){
+    if m == 2 { if leap(y) { return 29 } return 28 }
+    if m == 4 || m == 6 || m == 9 || m == 11 { return 30 } return 31
+}
+fn valid_date(s){
+    if !s.is_string() { return false }
+    if !regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "").test(s) { return false }
+    let a = s.split("-") let y = a[0].to_f64() let m = a[1].to_f64() let d = a[2].to_f64()
+    return y >= 1970 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= month_days(y,m)
+}
+fn epoch_day(s){
+    let a = s.split("-") let y = a[0].to_f64() let m = a[1].to_f64() let days = a[2].to_f64() - 1
+    days += 365 * (y - 1970) + floor((y - 1) / 4) - 492 - floor((y - 1) / 100) + 19 + floor((y - 1) / 400) - 4
+    let mo = 1 while mo < m { days += month_days(y,mo) mo += 1 } return days
+}
+fn today(){ let t = local_time(time_now() + 28800) return date_text(t.year,t.month,t.day) }
+fn month_of(s){ let a = s.split("-") return a[0] + "-" + a[1] }
+fn amount_cents(s){
+    if !regex("^[0-9]{1,8}(\\.[0-9]{1,2})?$", "").test(s) { return -1 }
+    let parts = s.split(".") let v = parts[0].to_f64() * 100
+    if parts.len() == 2 { let fraction = parts[1] if fraction.len() == 1 { fraction += "0" } v += fraction.to_f64() } return v
+}
+fn money(n){ return "" + floor(n / 100) + "." + pad(n % 100) }
+fn member(r,id){ if id == "" { return true } for f in r.flow_ids { if f == id { return true } } return false }
+fn valid_db(v){
+    let valid = false
+    try { valid = valid_db_fields(v) } catch { valid = false }
+    return valid
+}
+fn valid_db_fields(v){
+    if !v.is_object() { return false }
+    if v.schema_version != 1 || !v.records.is_array() || !v.flows.is_array() || !v.alerts.is_array() { return false }
+    if !(v.revision >= 0) || !(v.seq >= 0) || !(v.budget_cents >= 0) { return false }
+    if v.records.len() > 800 || v.flows.len() > 80 || v.alerts.len() > 1600 { return false }
+    let ids = []
+    for f in v.flows {
+        if !f.is_object() { return false }
+        if !f.id.is_string() || !f.name.is_string() || !f.hidden.is_bool() { return false }
+        for id in ids { if id == f.id { return false } } ids.push(f.id)
+    }
+    ids = []
+    for r in v.records {
+        if !r.is_object() { return false }
+        if !r.id.is_string() || !r.title.is_string() || !r.flow_ids.is_array() || !valid_date(r.date) { return false }
+        if r.kind != "expense" && r.kind != "period" && r.kind != "task" && r.kind != "news" { return false }
+        if !r.end_date.is_string() || !r.source.is_string() || !r.status.is_string() { return false }
+        if r.end_date != "" { if !valid_date(r.end_date) || epoch_day(r.end_date) < epoch_day(r.date) { return false } }
+        if !(r.revision >= 1) || !(r.created_at >= 0) || !(r.updated_at >= 0) || !(r.cents >= 0) || r.cents != floor(r.cents) { return false }
+        if !(r.due_at >= 0) || !(r.completed_at >= 0) || !(r.reminded_due >= 0) { return false }
+        for id in ids { if id == r.id { return false } } ids.push(r.id)
+        for fid in r.flow_ids { let exists = false for f in v.flows { if f.id == fid { exists = true } } if !exists { return false } }
+    }
+    for a in v.alerts { if !a.is_object() { return false } if !a.key.is_string() || !a.text.is_string() || !a.record_id.is_string() || !a.active.is_bool() { return false } }
+    return v.period_enabled.is_bool() && v.private_hidden.is_bool() && v.budget_notified.is_bool() && v.budget_month.is_string() && business_valid_additions(v) && event_storage_valid(v)
+}
+fn write_checked(path,text){
+    let success = false
+    try { fs.write(path,text) success = fs.read(path) == text } catch { success = false }
+    return success
+}
+fn read_json(path){
+    let data = nil
+    try { if fs.exists(path) { data = fs.read(path).parse_json() } } catch { data = nil }
+    return data
+}
+fn clone_db(){ return db.to_json().parse_json() }
+fn refresh_status(){}
+fn redraw(){ render_screen() ui.navigation.render() ui.composer.render() ui.status.set_text(message) }
+fn navigate(s){ message = "数据已保存在本机 · Asia/Shanghai" go(s) }
+fn go(s){ screen = s page_offset = 0 delete_armed = false restore_armed = false redraw() }
+fn persist(candidate){
+    if !loaded { message = "数据尚未读完，未保存。" refresh_status() return false }
+    if locked { message = "数据异常：只读保护中。请到设置恢复备份。" refresh_status() return false }
+    if business_optional(db,"event_flow_version",0) != 2 && !fs.exists("pre-event-flow-v1.json") { if !write_checked("pre-event-flow-v1.json",db.to_json()) { message = "无法保留旧数据副本，未保存。" return false } }
+    candidate.event_flow_version = 2
+    candidate.revision = db.revision + 1
+    if !valid_db(candidate) { message = "校验失败，未保存。" refresh_status() return false }
+    let name = "state-a.json" if candidate.revision % 2 == 0 { name = "state-b.json" }
+    let serialized = candidate.to_json()
+    if !write_checked(name,serialized) { message = "写入失败，未保存；输入仍保留。" refresh_status() return false }
+
+    db = candidate calendar_rebuild() return true
+}
+fn boot(){
+    let a = nil let b = nil
+    if fs.exists("state-a.json") { a = read_json("state-a.json") }
+    if fs.exists("state-b.json") { b = read_json("state-b.json") }
+    let va = valid_db(a) let vb = valid_db(b)
+    if va { db = a } if vb { if !va || b.revision > db.revision { db = b } }
+    message = "本地数据已就绪"
+    if !va && !vb && (fs.exists("state-a.json") || fs.exists("state-b.json")) { locked = true message = "存储损坏，已停止写入；请从备份恢复。" }
+    if !va && !vb && !locked && fs.exists("expenses.json") { message = "检测到旧账本；设置中可导入，原文件不会改动。" }
+    selected = today() let t = selected.split("-") yy = t[0].to_f64() mm = t[1].to_f64() jump_date = selected context_date = selected
+    loaded = true calendar_rebuild()
+    redraw()
+}
+fn shift_month(delta){
+    let day = selected.split("-")[2].to_f64()
+    mm += delta if mm == 0 { mm = 12 yy -= 1 } if mm == 13 { mm = 1 yy += 1 }
+    if yy < 1970 { yy = 1970 mm = 1 } if yy > 2100 { yy = 2100 mm = 12 }
+    if day > month_days(yy,mm) { day = 1 } selected = date_text(yy,mm,day) jump_date = selected message = "已切换至 " + yy + " 年 " + mm + " 月" redraw()
+}
+fn jump(){
+    if !valid_date(jump_date) { message = "请输入有效日期 YYYY-MM-DD（1970–2100）" refresh_status() return }
+    selected = jump_date let t = selected.split("-") yy = t[0].to_f64() mm = t[1].to_f64() message = "已选择 " + selected redraw()
+}
+fn pick_day(n){ if n < 1 || n > month_days(yy,mm) { return } selected = date_text(yy,mm,n) jump_date = selected page_offset = 0 redraw() }
+fn day_label(n){ if n < 1 || n > month_days(yy,mm) { return " " } return "" + n }
+fn business_optional(obj,key,fallback){
+    let out = fallback
+    try { let value = obj[key] if value != nil { out = value } } catch { out = fallback }
+    return out
+}
+fn business_error(text){ return {"ok": false record_id: "" flow_ids: [] message: text replayed: false} }
+fn business_list_valid(items,limit,width){
+    if !items.is_array() || items.len() > limit { return false }
+    let seen = []
+    for item in items {
+        if !item.is_string() { return false }
+        if item.trim() == "" || item.len() > width { return false }
+        for old in seen { if old == item.trim() { return false } } seen.push(item.trim())
+    } return true
+}
+fn business_trim_list(items){ let result = [] for item in items { result.push(item.trim()) } return result }
+fn business_valid_additions(v){
+    let receipts = business_optional(v,"receipts",[])
+    if !receipts.is_array() || receipts.len() > 128 { return false }
+    let seen = {}
+    for receipt in receipts {
+        if !receipt.is_object() || !receipt.request_id.is_string() || !receipt.payload.is_string() || !receipt.record_id.is_string() || !receipt.flow_ids.is_array() { return false }
+        if receipt.request_id.len() < 1 || receipt.request_id.len() > 128 || receipt.payload.len() > 10000 || receipt.flow_ids.len() > 80 { return false }
+        for id in receipt.flow_ids { if !id.is_string() { return false } }
+        if seen[receipt.request_id] == true { return false } seen[receipt.request_id] = true
+    }
+    for r in v.records { if !business_list_valid(business_optional(r,"user_tags",[]),12,40) { return false } }
+    return true
+}
+fn export_backup(){
+    if locked { message = "数据损坏保护中，未导出空数据。" refresh_status() return }
+    let text = db.to_json() let success = write_checked("backup.json",text)
+    if !success { message = "导出失败。" refresh_status() return } if fs.read("backup.json") != text { message = "备份读回失败。" refresh_status() return }
+    let events = source_snapshot(db) write_checked("events-export.json",events.to_json())
+    message = "已导出并校验 backup.json（数据目录内）。" refresh_status()
+}
+fn restore_backup(){
+    if !fs.exists("backup.json") { message = "未找到 backup.json。" refresh_status() return }
+    let c = read_json("backup.json") if !valid_db(c) { message = "备份格式或引用无效，未恢复。" refresh_status() return }
+    if !restore_armed { restore_armed = true message = "再次点击确认用备份替换当前数据；先保留恢复前副本。" redraw() return }
+    if !write_checked("before-restore.json",db.to_json()) { message = "无法备份当前数据，恢复已取消。" refresh_status() return }
+    let was_locked = locked locked = false c.seq = max(c.seq,db.seq)
+    if persist(c) { active_flow = "" restore_armed = false message = "恢复完成；记录及关联已读回。" redraw() } else { locked = was_locked }
+}

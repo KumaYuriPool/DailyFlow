@@ -1,0 +1,68 @@
+// Calendar source and projection module. No access to the private expense store.
+let calendar_projection = []
+let calendar_mode = "ordinary"
+let scope_current = false
+fn calendar_snapshot(c){ return business_optional(c,"calendar_events",[]).to_json().parse_json() }
+fn calendar_get(id){ for e in calendar_snapshot(db) { if e.id == id { return e } } return nil }
+fn calendar_write(c,a){
+    if !valid_date(a.date) || a.title.trim() == "" || a.title.len() > 180 { return business_error("事件日期或事项无效。") }
+    if a.status != "planned" && a.status != "occurred" && a.status != "cancelled" { return business_error("事件状态无效。") }
+    if a.status == "occurred" && epoch_day(a.date) > epoch_day(today()) { return business_error("未来计划不能当作已发生。") }
+    if a.time != "" && !regex("^([01][0-9]|2[0-3]):[0-5][0-9]$", "").test(a.time) { return business_error("时间须为 HH:MM，未知请留空。") }
+    c.calendar_events = business_optional(c,"calendar_events",[]) let current = nil
+    for e in c.calendar_events { if e.id == a.record_id { current = e } }
+    if a.record_id != "" && (current == nil || current.revision != a.expected_revision) { return business_error("事件已变化，请重新查询。") }
+    if current == nil {
+        if a.expected_revision != 0 || c.calendar_events.len() >= 800 { return business_error("事件容量或修订无效。") }
+        current = {id: new_id(c,"evt") kind: "event" revision: 0 title: "" date: "" time: "" status: "planned" subject_refs: [] flow_ids: [] created_at: time_now() updated_at: time_now() completed_at: 0}
+        c.calendar_events.push(current)
+    }
+    if current.revision > 0 && current.status == "cancelled" && a.status != "cancelled" { return business_error("已撤回事件不可自动复活，请创建新事件。") }
+    current.title = a.title.trim() current.date = a.date current.time = a.time current.status = a.status current.revision += 1 current.updated_at = time_now()
+    current.subject_refs = business_optional(a,"subject_refs",[])
+    if a.status == "occurred" { current.completed_at = time_now() }
+    return {"ok": true record_id: current.id message: "事件已校验"}
+}
+fn calendar_membership(c,id,fid,link){
+    c.calendar_events = business_optional(c,"calendar_events",[])
+    for e in c.calendar_events { if e.id == id { let ids = [] for old in e.flow_ids { if old != fid { ids.push(old) } } if link { ids.push(fid) } if ids.to_json() != e.flow_ids.to_json() { e.flow_ids = ids e.revision += 1 } } }
+}
+fn calendar_remove(c,id,revision){
+    let kept = [] let removed = nil for e in calendar_snapshot(c) { if e.id == id { removed = e } else { kept.push(e) } }
+    if removed == nil || removed.revision != revision { return business_error("事件不存在或已变化。") }
+    c.calendar_events = kept tombstone_add(c,"calendar",id,revision + 1) return {"ok": true record_id: id}
+}
+fn protocol_envelope(r,module){
+    let status = "occurred" let amount = 0 let time = "" let precision = "day"
+    if module == "expense" { amount = r.cents } else { status = r.status time = r.time if time != "" { precision = "minute" } }
+    let occurred = r.date if time != "" { occurred += "T" + time + ":00+08:00" }
+    return {protocol_version: 1 change_id: module + "-" + r.id + "-" + r.revision operation: "upsert" source_app: "dailyflow" source_module: module source_record_id: r.id source_revision: r.revision date: r.date occurred_at: occurred time_precision: precision timezone: "Asia/Shanghai" summary: r.title status: status time: time amount_minor: amount currency: "CNY" flow_ids: r.flow_ids entry: {target: module record_id: r.id source_revision: r.revision action: "detail" actions: ["detail" "edit" "delete"]}}
+}
+fn source_snapshot(c){
+    let out = [] for r in expense_snapshot(c) { out.push(protocol_envelope(r,"expense")) } for e in calendar_snapshot(c) { out.push(protocol_envelope(e,"calendar")) }
+    for t in business_optional(c,"tombstones",[]) { out.push(t) } return out
+}
+fn projection_accept(items,event){
+    if event.protocol_version != 1 || event.source_app != "dailyflow" || (event.source_module != "expense" && event.source_module != "calendar") { return false }
+    for old in items { if old.source_module == event.source_module && old.source_record_id == event.source_record_id {
+        if old.source_revision >= event.source_revision { return false }
+        // Replace by index so omitted fields in a tombstone cannot leave stale amounts.
+    } }
+    let index = 0 for old in items { if old.source_module == event.source_module && old.source_record_id == event.source_record_id { items[index] = event return true } index += 1 }
+    items.push(event) return true
+}
+fn calendar_rebuild(){ calendar_projection = [] for event in source_snapshot(db) { projection_accept(calendar_projection,event) } }
+fn calendar_query(day,month,fid,mode){
+    let out = []
+    for e in calendar_projection { if e.operation == "upsert" {
+        let include = (day == "" || day == e.date) && (month == "" || month == month_of(e.date)) && member(e,fid)
+        if mode == "ledger" && e.source_module != "expense" { include = false }
+        // An event with an attached expense is one ordinary-calendar item.
+        if mode == "ordinary" && e.source_module == "expense" && flow_expense_on_day(e.source_record_id,fid,e.date) { include = false }
+        if include { out.push(e) }
+    } } return out
+}
+fn calendar_sum(day,month,fid){ let n = 0 for e in calendar_query(day,month,fid,"ledger") { n += e.amount_minor } return n }
+fn scope_id(){ if scope_current { return active_flow } return "" }
+fn scope_label(){ if scope_current && active_flow != "" { return "此事件" } return "全部" }
+fn state_label(s){ if s == "planned" { return "计划" } if s == "cancelled" { return "已撤回" } return "已发生" }
