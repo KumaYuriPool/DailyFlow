@@ -1,5 +1,11 @@
 # DailyFlow agent handoff
 
+## 2026-10-06 首次公开标签 v0.1.0 已推送，Issue 未发送
+
+用户认可提交正文，要求 unsigned、暂不附视频，并明确授权创建标签及将首次版本改为 0.1.0。最终标签指向 dfb69ea9130fd5c0b2778ebf647ea900a7537713；统一可发送正文为 docs/APP_HUB_ISSUE_0.1.0.md，完整 SHA 和公开链接已填。后续纯文档提交可能让 main 领先标签，提交 App Hub 必须使用此标签对应 SHA。
+
+build/release-0.1.0 保存检查和扫描、保护哈希及公开文件验证。首轮发布发现 Git 换行转换造成标签包 digest 不一致，已增加 .gitattributes 的 bundle/** -text 并重新纳入索引，确切提交导出的 fixed2 包 PASSED，十个公开文件核对通过。初建标签在仅本轮创建值的 lease 校验下修正；旧失败证据保留。业务源码工作区字节和六个保护文件不变，未触碰个人数据或原生代码。未发送 Issue、未进行 App Hub 入库，也未创建 GitHub Release。
+
 > 2026-10-06：用户已审核正文，明确授权首次公开版改为 0.1.0 并创建推送 v0.1.0 标签，签名 unsigned，暂不附视频；本次授权覆盖之前禁止提交推送标签的准备期限制，但不发送 App Hub Issue。只调整发布版本与材料，业务代码、个人数据及原生层不变。当前提交正文为 docs/APP_HUB_ISSUE_0.1.0.md；历史 0.6.x 文档与验收保留原编号。
 
 涉及模型、Prompt、上下文、模块路由或执行链路时，先读 [模型执行链路与核心架构](docs/AGENT_EXECUTION_ARCHITECTURE.md)。该文保存用户要求的流程图，按0.6.4注明三项注册查询与尚未接入对话的recall边界；结合 [产品路线规划](docs/PRODUCT_ROADMAP.md) 和时间协议使用，不把历史两能力图或未来规划当作当前实现。

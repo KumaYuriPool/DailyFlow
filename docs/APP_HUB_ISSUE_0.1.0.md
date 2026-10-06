@@ -1,8 +1,4 @@
-# 草稿 — 提交 DailyFlow 0.1.0
-
-尚未发送。发布者已认可正文，确认首次提交使用 unsigned，暂不提供操作视频。正在准备首次公开版本 v0.1.0；提交 SHA 和版本链接将在创建标签后核验。
-
-本文件是统一的审核与 Issue 正文草稿，产品介绍、展望、架构图、截图及审核答复都在这里。提交时使用本文件，不需要另附“审核材料”或 ZIP；发送前移除草稿提示，并补齐下方待定信息及图片链接。
+# Submit dailyflow 0.1.0
 
 ## DailyFlow：随手记下来，想起时再找
 
@@ -19,12 +15,12 @@
 - 发布者：毛茸茸战队
 - 发布者 ID：`kumayuripool`
 - 公开仓库：https://github.com/KumaYuriPool/DailyFlow
-- 拟用版本标签：`v0.1.0`（尚未创建）
-- 完整提交 SHA：**待创建 0.1.0 版本提交后填写**
+- 版本标签：`v0.1.0`（已推送）
+- 完整提交 SHA：`dfb69ea9130fd5c0b2778ebf647ea900a7537713`
 - 应用包路径：`bundle/`
 - 拟用签名方式：**unsigned**（首次提交，未签）
 - 平台／分类：Windows / productivity（效率工具）
-- 隐私文档：拟使用 https://github.com/KumaYuriPool/DailyFlow/blob/v0.1.0/PRIVACY.md ，提交前须确认可公开访问
+- 隐私文档：https://github.com/KumaYuriPool/DailyFlow/blob/v0.1.0/PRIVACY.md （已核验可公开访问）
 
 ## 这个早期版本可以做什么
 
@@ -112,25 +108,25 @@ flowchart TD
 
 ## 当前界面与演示
 
-以下三张截图来自当前真实 card-host 界面，使用新建合成数据，不含个人账本。图片链接指向拟用标签 `v0.1.0`，该标签尚未创建；发布者审核通过并推送后，发送 Issue 前须逐一确认图片可显示。
+以下三张截图来自当前真实 card-host 界面，使用新建合成数据，不含个人账本。图片来自已推送的 `v0.1.0` 标签，已核验可公开读取且与本地候选截图一致。
 
 ### 普通日历
 
 午餐 35 元与团子洗护 120 元，共 155 元；同日事项与明确关联的费用合并展示，计划不会预先计入支出。
 
-![普通日历](https://github.com/KumaYuriPool/DailyFlow/raw/refs/tags/v0.1.0/bundle/screenshots/01-calendar.png)
+![普通日历](https://raw.githubusercontent.com/KumaYuriPool/DailyFlow/v0.1.0/bundle/screenshots/01-calendar.png)
 
 ### 支出账本
 
 按费用源记录统计支出，同一笔费用不会因出现在多个视图中重复求和。
 
-![支出账本](https://github.com/KumaYuriPool/DailyFlow/raw/refs/tags/v0.1.0/bundle/screenshots/02-ledger.png)
+![支出账本](https://raw.githubusercontent.com/KumaYuriPool/DailyFlow/v0.1.0/bundle/screenshots/02-ledger.png)
 
 ### 按需回顾
 
 查找“团子洗护”，沿已确认的关系展示费用、事项和后续计划，可以回到原记录。当前演示为关键词查找，并非对话已经自动生成时间线。
 
-![按需回顾](https://github.com/KumaYuriPool/DailyFlow/raw/refs/tags/v0.1.0/bundle/screenshots/03-recall.png)
+![按需回顾](https://raw.githubusercontent.com/KumaYuriPool/DailyFlow/v0.1.0/bundle/screenshots/03-recall.png)
 
 ## 本地检查结果
 
@@ -173,6 +169,4 @@ dailyflow 0.1.0 — PASSED
 
 当前仍有 128 条自动请求收据、80 个命名分组等容量边界，没有连续七天使用证据；跨 App Shell 执行、目标商店宿主安装及授权链路还需验收。本次准备修正了支持删除的 `dailyflow.apply`、`dailyflow.save_record` 工具风险声明为 `destructive` 并设置 `confirm: host`，未修改应用内对话自动保存逻辑。产品介绍、隐私文档和合成截图已更新；未新增路线图中的业务功能，也未修改 Shell/Rust、模型服务配置或个人数据。
 
-## 提交前核对（发布者使用，发送时移除此节）
-
-正文已获发布者认可，签名方式为 unsigned。用户已授权改为首次公开版本 0.1.0 并创建标签。完成版本提交、标签推送及链接核验后，填入确切 SHA，使用本文件作为 Issue 正文。App Hub 入库由维护者审核决定，当前尚未发送 Issue。
+首次公开版本从 0.1.0 起算，历史内部开发版 0.6.x 的功能与数据格式保留。本次固定了 Git 对应用包的换行转换，已验证标签中的完整应用包与本地受检字节一致，并通过确切提交导出包的检查。
