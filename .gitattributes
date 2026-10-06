@@ -1,0 +1,2 @@
+# Bundle integrity covers exact file bytes; disable checkout/checkin conversion.
+bundle/** -text
