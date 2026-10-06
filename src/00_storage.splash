@@ -35,9 +35,10 @@ let delete_armed = false
 let locked = false
 let loaded = false
 let page_offset = 0
-let app_current = "calendar"
-let workspace_open = true
-let workspace_view = "calendar"
+let workspace_open = false
+let workspace_expanded = false
+let layout_wide = false
+let viewport_width = 0
 let dropdown_open = ""
 let dropdown_query = ""
 let context_date = ""
@@ -116,7 +117,7 @@ fn clone_db(){ return db.to_json().parse_json() }
 fn refresh_status(){}
 fn redraw(){ render_screen() ui.navigation.render() ui.composer.render() ui.status.set_text(message) }
 fn navigate(s){ message = "数据已保存在本机 · Asia/Shanghai" go(s) }
-fn go(s){ screen = s page_offset = 0 delete_armed = false restore_armed = false redraw() }
+fn go(s){ screen = s workspace_open = s != "home" page_offset = 0 delete_armed = false restore_armed = false redraw() }
 fn persist(candidate){
     if !loaded { message = "数据尚未读完，未保存。" refresh_status() return false }
     if locked { message = "数据异常：只读保护中。请到设置恢复备份。" refresh_status() return false }

@@ -36,9 +36,10 @@ let delete_armed = false
 let locked = false
 let loaded = false
 let page_offset = 0
-let app_current = "calendar"
-let workspace_open = true
-let workspace_view = "calendar"
+let workspace_open = false
+let workspace_expanded = false
+let layout_wide = false
+let viewport_width = 0
 let dropdown_open = ""
 let dropdown_query = ""
 let context_date = ""
@@ -117,7 +118,7 @@ fn clone_db(){ return db.to_json().parse_json() }
 fn refresh_status(){}
 fn redraw(){ render_screen() ui.navigation.render() ui.composer.render() ui.status.set_text(message) }
 fn navigate(s){ message = "数据已保存在本机 · Asia/Shanghai" go(s) }
-fn go(s){ screen = s page_offset = 0 delete_armed = false restore_armed = false redraw() }
+fn go(s){ screen = s workspace_open = s != "home" page_offset = 0 delete_armed = false restore_armed = false redraw() }
 fn persist(candidate){
     if !loaded { message = "数据尚未读完，未保存。" refresh_status() return false }
     if locked { message = "数据异常：只读保护中。请到设置恢复备份。" refresh_status() return false }
@@ -620,8 +621,31 @@ fn send_model(){
     start_timeout(45,|| { if busy && serial == request_serial { request_serial += 1 busy = false chat_state = "error" chat_result = "模型超时，未保存；迟到结果会忽略。" redraw() } })
 }
 
+// Keep the columns mounted: hiding a workspace must not discard its route or draft.
+fn render_layout(){
+    ui.flow_rail.set_visible(layout_wide)
+    ui.chat_column.set_visible(!workspace_open || (layout_wide && !workspace_expanded))
+    ui.workspace_column.set_visible(workspace_open)
+    ui.workspace_header.render()
+}
+// Full Shell reports the actual app viewport, including tile/window resizing.
+// Standalone card-host has no resize hook; it starts compact and offers a layout switch.
+fn on_app_resize(width,height){
+    if width <= 0 || height <= 0 { return }
+    viewport_width = width
+    let wide = width >= 960
+    if wide != layout_wide { layout_wide = wide if loaded { render_layout() ui.navigation.render() } }
+}
+fn toggle_layout(){
+    if !layout_wide && viewport_width > 0 && viewport_width < 960 { message = "拉宽应用窗口后即可并排查看。" ui.status.set_text(message) return }
+    layout_wide = !layout_wide render_layout() ui.navigation.render()
+}
+fn close_workspace(){ workspace_open = false render_layout() ui.navigation.render() }
+fn resume_workspace(){ if screen == "home" { go("calendar") } else { workspace_open = true redraw() } }
+fn expand_workspace(){ workspace_expanded = !workspace_expanded render_layout() }
+fn focus_conversation(){ workspace_expanded = false if !layout_wide { workspace_open = false } render_layout() ui.navigation.render() }
 fn render_screen(){
-    ui.home_page.set_visible(screen == "home")
+    render_layout()
     ui.picker_page.set_visible(screen == "picker")
     ui.calendar_page.set_visible(screen == "calendar")
     ui.ledger_page.set_visible(screen == "ledger")
@@ -629,7 +653,8 @@ fn render_screen(){
     ui.detail_page.set_visible(screen == "detail")
     ui.edit_page.set_visible(screen == "edit")
     ui.settings_page.set_visible(screen == "settings")
-    if screen == "home" { ui.home_page.render() }
+    ui.home_page.render()
+    ui.flow_list.render()
     if screen == "picker" { ui.picker_results.render() }
     if screen == "calendar" { ui.calendar_page.render() }
     if screen == "ledger" { ui.ledger_page.render() }
@@ -639,23 +664,29 @@ fn render_screen(){
     if screen == "settings" { ui.settings_page.render() }
 }
 let picker_return = "home"
-fn picker(kind){ if screen != "picker" { picker_return = screen } dropdown_open = kind dropdown_query = "" ui.picker_search.set_text("") go("picker") }
-fn picker_close(){ go(picker_return) }
+let picker_was_open = false
+fn picker(kind){ if screen != "picker" { picker_return = screen picker_was_open = workspace_open } dropdown_open = kind dropdown_query = "" ui.picker_search.set_text("") go("picker") }
+fn picker_close(){ screen = picker_return workspace_open = picker_was_open dropdown_open = "" redraw() }
 fn matches(text){ return dropdown_query == "" || text.search(dropdown_query) >= 0 }
-fn workspace(s){ dropdown_open = "" route_stack = [] go(s) }
+fn workspace(s){ if s == "home" { close_workspace() return } dropdown_open = "" route_stack = [] go(s) }
 fn choose_flow(fid){
     clear_chat() last_saved = "" active_flow = fid scope_current = fid != ""
     chat_result = "记录、查询或更正，都可以直接说。"
-    route_stack = [] go("home")
+    route_stack = []
+    if screen == "picker" { screen = picker_return workspace_open = picker_was_open dropdown_open = "" }
+    if screen != "calendar" && screen != "ledger" { screen = "home" workspace_open = false }
+    focus_conversation() redraw()
 }
 fn new_conversation(){ chat_text = "" context_date = today() choose_flow("") }
 fn backfill_here(){
-    clear_chat() context_date = selected chat_result = "补记日期已选定；直接说出要记录的事。" go("home")
+    clear_chat() context_date = selected chat_result = "补记日期已选定；直接说出要记录的事。" focus_conversation() redraw()
 }
 fn input_scope(){ if active_flow == "" { return "全部事件" } return flow_name(active_flow) }
 fn workspace_title(){
     if screen == "calendar" { return "日历" } if screen == "ledger" { return "账本" }
     if screen == "graph" { return "事件关系" } if screen == "home" { return input_scope() }
+    if screen == "detail" { return "源记录" } if screen == "edit" { return "编辑记录" }
+    if screen == "settings" { return "本地数据" } if screen == "picker" { return "选择" }
     return "工作区"
 }
 // Read views use public module queries. All edits route through coordinator_apply.
@@ -669,7 +700,7 @@ fn push_route(){ route_stack.push({screen: screen flow: active_flow filter_curre
 fn view_back(){
     if route_stack.len() == 0 { go("home") return }
     let kept = [] let r = route_stack[route_stack.len()-1] for i in route_stack.len() { if i < route_stack.len()-1 { kept.push(route_stack[i]) } } route_stack = kept
-    screen = r.screen active_flow = r.flow scope_current = r.filter_current yy = r.year mm = r.month selected = r.selected page_offset = r.offset detail_id = r.record delete_armed = false redraw()
+    screen = r.screen workspace_open = screen != "home" active_flow = r.flow scope_current = r.filter_current yy = r.year mm = r.month selected = r.selected page_offset = r.offset detail_id = r.record delete_armed = false redraw()
 }
 fn view_open(id){ push_route() detail_id = id go("detail") }
 fn graph_open(fid){ push_route() active_flow = fid scope_current = true go("graph") }
@@ -723,21 +754,39 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
         View{width: Fill height: Fill}
         ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 40 text: "数据" on_click: || { push_route() go("settings") }}
     }
+    flow_rail := SolidView{width: 168 height: Fill flow: Down padding: 8 spacing: 6 visible: false draw_bg.color: #xf4f5f1
+        Label{width: Fill text: "Flow" draw_text.color: ink draw_text.text_style.font_size: 12 draw_text.text_style.font_weight: 600}
+        ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 28 text: "全部事件" on_click: || choose_flow("")}
+        flow_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 4 on_render: || {
+            for f in flow_catalog(db) {
+                let row_bg = if scope_current && active_flow == f.id { #xeaf3f1 } else { #xffffff }
+                SolidView{width: Fill height: Fit flow: Down padding: 6 spacing: 2 draw_bg.color: row_bg
+                    ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 32 text: f.name draw_text.color: ink draw_text.text_style.font_size: 11 on_click: || { choose_flow(f.id) }}
+                    let summary = flow_query(f.id)
+                    Label{width: Fill text: "支出 ¥" + money(summary.amount_minor) draw_text.color: muted draw_text.text_style.font_size: 9}
+                    Label{width: Fill text: "" + summary.plans + " 项计划" draw_text.color: muted draw_text.text_style.font_size: 9}
+                }
+            }
+            if flow_catalog(db).len() == 0 { Label{text: "暂无 Flow" draw_text.color: muted draw_text.text_style.font_size: 10} }
+        }}
+        Label{width: Fill text: "持续发生的事，在这里接着说。" draw_text.color: muted draw_text.text_style.font_size: 9}
+    }
     View{width: Fill height: Fill flow: Down padding: 12 spacing: 8
     navigation := View{width: Fill height: Fit flow: Down spacing: 6 on_render: || {
         View{width: Fill height: 34 flow: Right spacing: 5
             ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 34 text: "Flow · " + input_scope() + " ▾" on_click: || picker("flows")}
             ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 96 height: 34 text: "+ 说件新事" on_click: || new_conversation()}
         }
-        if screen != "home" && screen != "picker" {
-            View{width: Fill height: 32 flow: Right spacing: 5
-                ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 32 text: workspace_title() + " ▾" on_click: || picker("apps")}
-                ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 74 height: 32 text: "回到对话" on_click: || workspace("home")}
-            }
+        View{width: Fill height: 30 flow: Right spacing: 5
+            let layout_label = "并排查看" if layout_wide { layout_label = "单列查看" }
+            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 84 height: 30 text: layout_label on_click: || toggle_layout()}
+            if !workspace_open { ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 30 text: "打开工作区" on_click: || resume_workspace()} }
+            else { Label{width: Fill text: "对话与工作区" draw_text.color: muted draw_text.text_style.font_size: 10} }
         }
     }}
     status := Label{width: Fill text: "读取中" draw_text.color: muted draw_text.text_style.font_size: 10}
-    page := View{width: Fill height: Fill flow: Down
+    page := View{width: Fill height: Fill flow: Right spacing: 12
+        chat_column := View{width: Fill height: Fill flow: Down spacing: 10
         home_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 14 on_render: || {
             Label{width: Fill text: "今天发生了什么？" draw_text.color: ink draw_text.text_style.font_size: 26}
             Label{width: Fill text: "记下一件事，让费用与后续安排自然连起来。" draw_text.color: muted draw_text.text_style.font_size: 11}
@@ -764,6 +813,28 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
             }
             if chat_state == "save_error" { ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill text: "重试保存" on_click: || chat_retry_save()} }
         }}
+    composer := View{width: Fill height: Fit flow: Down spacing: 5 on_render: || {
+        Label{width: Fill text: context_text() draw_text.color: muted draw_text.text_style.font_size: 10}
+        chat_input := TextInput{draw_bg +: {color: #xf4f5f1 color_hover: #xf4f5f1 color_focus: #xffffff color_empty: #xf4f5f1} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 44 text: chat_text empty_text: "记录、查询或更正…" on_change: |v| chat_edit(v) on_return: |v| { focus_conversation() send_model() }}
+        View{width: Fill height: 34 flow: Right spacing: 5
+            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 34 text: chat_send_label() on_click: || { focus_conversation() send_model() }}
+            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 60 height: 34 text: "取消" on_click: || chat_reset()}
+            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 74 height: 34 text: "记一笔" on_click: || view_new("expense")}
+        }
+    }}
+        }
+        workspace_column := SolidView{width: Fill height: Fill flow: Down padding: 12 spacing: 8 visible: false draw_bg.color: #xf8faf6
+            workspace_header := View{width: Fill height: Fit flow: Down spacing: 5 on_render: || {
+                View{width: Fill height: 34 flow: Right spacing: 5
+                ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 34 text: workspace_title() + " ▾" on_click: || picker("apps")}
+                if layout_wide {
+                    let expand_label = "放大" if workspace_expanded { expand_label = "恢复" }
+                    ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 54 height: 34 text: expand_label on_click: || expand_workspace()}
+                    ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 54 height: 34 text: "收起" on_click: || close_workspace()}
+                } else { ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 84 height: 34 text: "回到对话" on_click: || close_workspace()} }
+                }
+                if !layout_wide || workspace_expanded { Label{width: Fill text: context_text() draw_text.color: muted draw_text.text_style.font_size: 10} }
+            }}
         picker_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 10
             ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 text: "‹ 关闭选择" on_click: || picker_close()}
             picker_search := TextInput{draw_bg +: {color: #xf4f5f1 color_hover: #xf4f5f1 color_focus: #xffffff color_empty: #xf4f5f1} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 40 text: dropdown_query empty_text: "搜索应用、视图或事件…" on_change: |v| { dropdown_query = v ui.picker_results.render() }}
@@ -787,7 +858,7 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
                 if count == 0 { Label{width: Fill text: "没有匹配结果" draw_text.color: muted} }
             }}
         }
-        calendar_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 7 visible: true on_render: || {
+        calendar_page := ScrollYView{width: Fill height: Fill flow: Down padding: Inset{right: 12} spacing: 7 visible: true on_render: || {
             View{width: Fill height: Fit flow: Down spacing: 12
             View{width: Fill height: Fit flow: Down spacing: 7
             View{width: Fill height: 36 flow: Right spacing: 4
@@ -918,15 +989,7 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
             ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill text: "导入旧账本" on_click: || expense_import()}
             Label{width: Fill text: "备份保留全部历史个人数据。恢复前会另存副本。" draw_text.color: muted}
         }}
-    }
-    composer := View{width: Fill height: Fit flow: Down spacing: 5 on_render: || {
-        Label{width: Fill text: context_text() draw_text.color: muted draw_text.text_style.font_size: 10}
-        chat_input := TextInput{draw_bg +: {color: #xf4f5f1 color_hover: #xf4f5f1 color_focus: #xffffff color_empty: #xf4f5f1} draw_text +: {color: ink color_hover: ink color_focus: ink color_empty: muted color_empty_hover: muted} width: Fill height: 44 text: chat_text empty_text: "记录、查询或更正…" on_change: |v| chat_edit(v) on_return: |v| { workspace("home") send_model() }}
-        View{width: Fill height: 34 flow: Right spacing: 5
-            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: Fill height: 34 text: chat_send_label() on_click: || { workspace("home") send_model() }}
-            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 60 height: 34 text: "取消" on_click: || chat_reset()}
-            ButtonFlat{draw_bg +: {color: #xf0f3ed color_hover: #xe3eadd color_down: #xd7e3d4 border_size: 0.0 border_radius: 6.0} draw_text +: {color: ink color_hover: ink color_down: ink} label_walk: Walk{width: Fill height: Fit} draw_text.text_overflow: Ellipsis draw_text.max_lines: 1 width: 74 height: 34 text: "记一笔" on_click: || view_new("expense")}
         }
-    }}
+    }
     }
 }

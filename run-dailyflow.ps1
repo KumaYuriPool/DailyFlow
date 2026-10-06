@@ -5,6 +5,13 @@ $taskPython = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'
 $env:PYTHONUTF8 = '1'
 $env:OCTO_HUB = Join-Path $taskWorkspace 'OctoSense-App-Hub\target\release\hub.exe'
 $env:OCTO_CARD_HOST = Join-Path $taskWorkspace 'OctoSense-App-Hub\target\release\card-host.exe'
+$taskActiveRelease = Join-Path $taskWorkspace 'native-runtime-active.json'
+if (Test-Path -LiteralPath $taskActiveRelease) {
+    $taskRelease = Get-Content -LiteralPath $taskActiveRelease -Raw | ConvertFrom-Json
+    if ($taskRelease.schema -ne 1) { throw 'Unsupported native runtime release schema' }
+    $env:OCTO_HUB = Join-Path $taskWorkspace $taskRelease.binaries.hub
+    $env:OCTO_CARD_HOST = Join-Path $taskWorkspace $taskRelease.binaries.card_host
+}
 foreach ($taskExecutable in @($taskPython, $env:OCTO_HUB, $env:OCTO_CARD_HOST)) {
     if (!(Test-Path -LiteralPath $taskExecutable -PathType Leaf)) { throw "Missing executable: $taskExecutable" }
 }

@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 import time
 import urllib.parse
 import urllib.request
+import native_runtime
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -51,12 +52,14 @@ def manifest_defaults(m):
     return m
 
 
-def stage_local_catalog(bundle, apps):
+def stage_local_catalog(bundle, apps, hub_binary=None, isolated_bundle=None):
     """Stage signed local code/catalog only; private signing keys stay in memory.
 
     The caller must hold its data-root lock. Existing application state is preserved.
     """
     apps = Path(apps).resolve()
+    if isolated_bundle is None:
+        isolated_bundle = native_runtime.isolated_bundle()
     apps.mkdir(parents=True, exist_ok=True)
     stamp_date = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     staging = apps / (".dailyflow-stage-" + uuid.uuid4().hex)
@@ -72,7 +75,7 @@ def stage_local_catalog(bundle, apps):
             raise ValueError("App directory may not redirect outside the launcher data root")
         staged_bundle = staging / "bundle"
         shutil.copytree(bundle, staged_bundle)
-        hub = WORKSPACE / "OctoSense-App-Hub/target/release/hub.exe"
+        hub = Path(hub_binary or native_runtime.binary("hub"))
         subprocess.run([str(hub), "stamp", str(staged_bundle)], check=True, capture_output=True)
         subprocess.run([str(hub), "check", str(staged_bundle), "--allow-unsigned"], check=True, capture_output=True)
         m = manifest_defaults(json.loads((staged_bundle / "manifest.json").read_text(encoding="utf-8")))
@@ -98,9 +101,14 @@ def stage_local_catalog(bundle, apps):
         catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
         subprocess.run([str(hub), "verify", str(catalog_path), "--anchor", anchor_pub], check=True, capture_output=True)
         # Replace only the staged application code, never its state or account directories.
-        destination = app_dir / "bundle"
+        # App Hub keeps installed code outside the writable application jail.
+        install_dir = apps / ".bundles" / app_id if isolated_bundle else app_dir
+        install_dir.mkdir(parents=True, exist_ok=True)
+        if install_dir.resolve() != (apps / ".bundles" / app_id if isolated_bundle else app_dir):
+            raise ValueError("Installation directory may not redirect outside the launcher data root")
+        destination = install_dir / "bundle"
         if destination.exists():
-            if destination.resolve() != app_dir / "bundle":
+            if destination.resolve() != install_dir / "bundle":
                 raise ValueError("Bundle directory may not redirect outside the app directory")
             destination.rename(staging / "previous-bundle")
         try:
@@ -119,11 +127,11 @@ def stage_local_catalog(bundle, apps):
 
 
 class DesktopProbe:
-    def __init__(self, bundle, output, core_dir=None, binary=None, seed_state=None):
+    def __init__(self, bundle, output, core_dir=None, binary=None, seed_state=None, hub_binary=None, isolated_bundle=None):
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=False)
         self.apps = self.output / "apps"
-        self.app_id, self.bundle, anchor_pub = stage_local_catalog(bundle, self.apps)
+        self.app_id, self.bundle, anchor_pub = stage_local_catalog(bundle, self.apps, hub_binary, isolated_bundle)
         if seed_state is not None:
             # Explicit synthetic state only, supplied by the event acceptance harness.
             for source in Path(seed_state).glob('state-*.json'):
@@ -146,7 +154,7 @@ class DesktopProbe:
             self.profile_hash = hashlib.sha256(self.profile.read_bytes()).hexdigest()
         else:
             env["OCTOS_APP_CORE_DIR"] = str(self.output / "core")
-        exe = Path(binary or WORKSPACE / "OctoSense/target/release/octosense.exe").resolve()
+        exe = Path(binary or native_runtime.binary("shell")).resolve()
         self.log = (self.output / "desktop.log").open("w", encoding="utf-8")
         self.child = subprocess.Popen([str(exe), "--test-action", "launch-hub:" + self.app_id],
                                       cwd=WORKSPACE / "OctoSense", env=env,
@@ -169,7 +177,7 @@ class DesktopProbe:
                 raise RuntimeError(f"desktop exited {self.child.returncode}; see desktop.log")
             try:
                 snap = self.snapshot()
-                if any(w.get("i") == "date_jump" for w in snap.get("s", [])) and any(w.get("i") == "status" and w.get("t") != "读取中" for w in snap.get("s", [])):
+                if any(w.get("i") == "chat_input" for w in snap.get("s", [])) and any(w.get("i") == "status" and w.get("t") != "读取中" for w in snap.get("s", [])):
                     return snap
             except (OSError, TimeoutError, ValueError):
                 pass

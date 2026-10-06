@@ -1,5 +1,25 @@
 # DailyFlow agent handoff
 
+## 2026-10-06 DailyFlow 0.5.2：四列与面板放大接入完成
+
+用户要求“继续接入”，本轮只改 DailyFlow 的 `src/00_storage.splash` UI 状态、`src/60_ui.splash`、生成包／版本、测试和文档。**未改 Shell、Makepad、App Hub、运行时、启动器或个人数据，未提交／推送／发布。** 这次是完整产品 UI 接入，优先于下方历史“不能四列／必须改 runtime”结论。
+
+- 宽屏 App 栏 52px、Flow 栏 168px、对话和工作区两列 Fill。工作区放大／恢复通过保留节点并切换可见性实现，收起不清除路由，重开继续原页；草稿、未保存编辑、搜索、月份／日期／范围保留。输入和工作区分开；宽屏补记和发送保留工作区，窄屏回对话。
+- 完整 Shell 既有 `on_app_resize` 以应用内容宽度 960 逻辑像素自动切换；真正拖动本轮自建测试窗口边缘 989→759→989，自动四列→单列→四列通过。独立 card-host 不调用此 hook，默认单列，可点“并排查看”；不为此修改原生层。手动布局选项在下一次 Shell 尺寸改变时重新按宽度计算。
+- Flow 栏实际执行 on_render，显示真实名称／金额／计划摘要，删除固定示例文字；保存同 ID 源账目后汇总更新。日历保留滚动条空间；短窗口允许纵向滚动，不能要求全月和详情同屏。源记录与业务协议未改。
+- 证据 `build/four-column-r1/`：`wide-final2` 宽屏真实点击／完整 35 日格，面板宽度 512→1036→512；`desktop-final4` 完整 Shell 点击／编辑保存／拖动响应；`narrow-final` 412×892 原 12 类回归；`business-final` 15 次真实工具调用；`agent-final` 20 项注入断言＋真实短超时。相关截图已查看；本轮没有真实 Provider 调用或新 Shell Agent 验收。
+- `final-gate.log` 活跃 hub 的 octo check 0.5.2 PASSED，仍未签名／发布者模板未处理。保护文件和最终测试源一致性见 `final-audit.json`。仅关闭自己的测试宿主，没有关用户当前 DailyFlow；现有 AI CMD 启动器会在下次正常重启暂存新包。农历仍暂缓，草稿／会话不跨进程重启。
+
+最终保护核对：875 个可读取基线文件中 871 个字节一致，DailyFlow 个人业务／Provider 文件和原生锁／修复／程序／selector 均未变。已有桌面会话仍持有 `.launcher.lock`，运行日志和 3 个 `.host/news` 缓存文件在期间更新；单独列于 `final-audit.json`，未覆盖或回滚，不能宣称整个 `.local-state` 字节不变。
+
+详情：`docs/CONVERSATION_WORKSPACE_ACCEPTANCE.md`。构建只编译 00–60 七个模块，不启用历史 61–64 实验文件；不要直接改生成包。
+
+## 2026-10-06 原生环境升级后的启动方式
+
+用户另行授权更新 Shell/Makepad/App Hub。新运行版本在 `../build/native-update-20261006/OctoSense/`，原脏仓库和旧程序保留。`../native-runtime-active.json` 选择活跃程序；`tools/native_runtime.py`、桌面启动器和独立 PS1 入口已使用它。原 `run-dailyflow-ai.cmd` / `run-dailyflow.cmd` 用法不变。新版商店代码路径是 `.bundles/<id>/bundle`，个人状态仍在 `<id>/`。移走 selector 会恢复旧程序和旧暂存布局，不要回滚用户数据。详情以 `../agent.md` 最新段为准。
+
+本轮未改 DailyFlow src/bundle 产品功能。UI/业务/注入回归新增 --binary 参数，以隔离数据验证了新 card-host；完整 Shell 与三个实际启动入口已验证。没有新增真实 Provider 请求或 Shell Agent 工具派发。当前源码中已有固定 132px Flow 栏，在窄屏挤压日历标题；这是现有应用布局，不是完整四列实现。本轮四列/面板放大仅单独原语探针通过。个人数据及 Provider 配置未改。不要删除活跃的 native-update-20261006 目录。
+
 ## 2026-10-05 0.5.1 实际交付（优先于下方旧记录）
 
 用户明确要求实现 conversation workspace 预览，但禁止修改任何 Shell 内容；绕不过可换方案或暂缓。本轮只改 DailyFlow 应用层、测试与文档，不动 Shell/Rust/Hub/Makepad/启动器，不提交发布。
@@ -14,25 +34,23 @@
 
 运行 UI 回归用 `tools/test_conversation_ui.py`；所有测试输出必须新目录，个人数据不作测试。版本 0.5.1；既有改动继续保留。
 
-## 2026-10-05 workspace UI 0.5.0 (latest implementation; iteration aligned to the design preview)
+## 2026-10-05 workspace UI 0.5.1 (current implementation; 7-tab structure with picker overlay)
 
-The conversation-first workspace direction in `docs/CONVERSATION_WORKSPACE_DESIGN.md` is now reflected in the app. Build with `python -X utf8 tools/build_event_app.py`; do not edit generated bundle/main.splash. Backed up in `build/workspace-ui-r1/baseline`.
+The conversation-first workspace direction in `docs/CONVERSATION_WORKSPACE_DESIGN.md` is now reflected in the app. **The actual 0.5.1 build is NOT the 0.5.0 6-tab baseline** — it is a 7-tab structure where home_page is the conversation + workspace, and picker_page is a search overlay for app/view/flow entry. The 0.5.0 6-tab baseline (`build/workspace-ui-r1/baseline/src/60_ui.splash`, 216 lines, calendar/ledger/graph/detail/edit/settings) is kept as a fallback; do not delete it. Build with `python -X utf8 tools/build_event_app.py`; do not edit generated bundle/main.splash. Manifest is currently `0.5.1` (auto-read from bundle/manifest.json by the hub).
 
-What changed in `src/60_ui.splash`:
+What is currently in `src/60_ui.splash` (310 lines, 0.5.1):
 
-- Home page is the conversation; greeting `今天发生了什么？` plus persistent composer and context line `补记 YYYY-MM-DD · 全部/此事件`.
-- Left 64px App rail with four entries (对话 / 日历 / 账本 / 全部). Middle 150px Flow rail (Flow ▣ heading, `+ 说一件新事`, `全部事件`, footer note). Main column holds the welcome / saved-card / transcript / context strip / composer.
-- Workspace dropdown `日历  ▾` opens `可用视图` (search + 普通日历 / 账本日历 with `来源：日历/记账`).
-- Calendar tiles redesigned: centered numerals in a circular selected background (accent fill, white text), today ring, muted off-month; `·N` prefix and full blue tiles removed. Ledger tiles show only the day's actual amount below the date.
-- Browse vs backfill: `selected` only changes via tile clicks and date jump; `context_date` only changes via the explicit `以X月Y日补记` button. The model receives `displayed_date=context_date`; explicit user-stated dates still win (see `EVENT_FLOW_PROTOCOL.md`).
+- **home_page** (default): greeting `今天发生了什么？` + chip, saved-receipt card (`D · 已记录 · {title} · ¥{cents}`), transcript (user messages top-right, assistant `D` badge), composer (context line + TextInput + `↑` send button).
+- **picker_page** (overlay): single search input `搜索应用、视图或事件…` + results list grouped into `可用应用入口` / `日历视图与来源` / `事件 Flow`.
+- **calendar_page** / **ledger_page** / **graph_page** / **detail_page** / **edit_page** / **settings_page**: 6 tab screens; calendar shows month header + weekday row + 6×7 day tiles with today/selected coloring.
 
 Known boundaries (be honest about them, do not claim alignment on these):
 
-- **The 0.5.0 build is the baseline single-page layout, NOT the preview's three-column layout.** We tried three iterations to add App rail + Flow rail + main column + workspace column (preview's three-column design) and consistently hit Splash widget compilation / on_render closure depth limits. The 0.5.0 build therefore matches preview at the *content* level (App rail entries / Flow list rows / browse-and-backfill / workspace panel header / calendar / ledger / graph sub-views) but NOT at the *layout* level (no Flow.Right wrap onto a second row on narrow screens; no 4th workspace column beside the main column).
-- Splash's `Flow.Right wrap` does not actually wrap to a second row when the children exceed the parent's width, so the preview's three-column side-by-side layout cannot be reproduced exactly on 412px screens. The workspace sits below the chat column as a stacked panel instead.
-- Splash widget compilation has a hidden per-body budget. When the body contains too many independent `on_render` closures, too many SolidView/ScrollYView nodes, or too many `for` loop nested levels, the entire body is silently dropped (no error, just empty widget tree — only the desktop chrome and 11 default widgets remain). This was hit consistently when adding 3 more pages (detail / edit / settings) as separate ScrollYViews, even with their content minimalized. Reducing `home_chat` from 480 to 240 px did not help; deleting for-loops did not help; `composer` in `main_col` vs as a top-level sibling did not help. The only recovery was to revert to the baseline `60_ui.splash` (181 widget / 54 button / 6 tab screens all working).
+- **The 0.5.1 build is still NOT the preview's three-column layout** (App rail / Flow rail / workspace column beside main column). The 0.5.1 structure is a vertical stack of 7 `ScrollYView` tabs switched by `screen` state, with the home_page + workspace panel stacked inside the main column. We tried three iterations to refactor to a horizontal three-column layout and consistently hit Splash widget compilation / on_render closure depth limits. The 0.5.1 build therefore matches preview at the *content* level (App rail entries via picker / Flow list rows / browse-and-backfill / workspace panel header / calendar / ledger / graph sub-views) but NOT at the *layout* level (no Flow.Right wrap onto a second row on narrow screens; no 4th workspace column beside the main column).
+- Splash's `Flow.Right wrap` does not actually wrap to a second row when the children exceed the parent's width, so the preview's three-column side-by-side layout cannot be reproduced exactly on 412px screens. The workspace sits below the chat column as a stacked panel inside home_page instead.
+- Splash widget compilation does NOT have a hard per-body budget in 0.5.1 + new upstream. When the body contains multiple `on_render` closures, several SolidView/ScrollYView nodes, or 2-level `for` loop nesting (e.g. calendar_page's `for row in rows { for col in 7 { ... } }`), the entire body is rendered correctly: 138 widget / 54 button smoke test passed (calendar 6×7 grid with nested for) and 0 `E` errors. The 0.5.0-era "compilation budget exceeded" failures were a 0.5.0-specific symptom (probably d3d11 shader-pending state per the 0.5.0 log; see `redraw_all` fix in upstream PR #71), not a hard limit. Do not pre-emptively split ScrollYViews or remove for-loops to "save budget"; the new upstream tolerates the 0.5.1 structure.
 - Top-level `SolidView` siblings alongside `page` cause the page body to be silently dropped (widget count drops from 69 to 30). The workspace must stay nested inside `home_page.on_render` (or similar in-body ScrollYView). Cross-file top-level SolidView declarations in 61-64_*.splash also trigger this. So the placeholder multi-file split in `tools/build_event_app.py` FILES remains a forward-planning slot, not a usable layout split, until the compilation budget is lifted.
-- The 4th workspace column has 5 visible day tiles (5-9 of October 2026) instead of 7 when displayed in a stacked home_week ScrollYView (60 px tall). The user can still navigate to other weeks by clicking `今天` (which jumps to today, 5) or by tapping any visible tile to test the backfill interaction.
+- The 4th workspace column (when it appears inside home_page as a stacked panel) has 5 visible day tiles (5-9 of October 2026) instead of 7. The user can still navigate to other weeks by clicking `今天` (which jumps to today, 5) or by tapping any visible tile to test the backfill interaction.
 - Lunar calendar is not added (per the design doc, deliver without lunar if a reliable computation could not be verified; `Intl.DateTimeFormat` is not available in current Splash).
 - In-memory `selected` / `context_date` are not persisted; both reset to `today()` after restart. Event graph, Flow, relations, and receipts still rebuild from disk.
 

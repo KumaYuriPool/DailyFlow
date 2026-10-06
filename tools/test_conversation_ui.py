@@ -142,8 +142,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seed', type=Path, required=True)
+    parser.add_argument('--binary', type=Path)
     args = parser.parse_args()
-    p = Probe(args.output, args.seed)
+    p = Probe(args.output, args.seed, binary=args.binary)
     try:
         run(p)
     except BaseException:

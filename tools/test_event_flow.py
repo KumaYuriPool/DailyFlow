@@ -8,8 +8,8 @@ def data(results,i):
     assert results[i]['ok'],results[i]
     return results[i]['data']
 
-def run(output):
-    d.configure(Path('bundle'),output,Path('../OctoSense-App-Hub/target/release/card-host.exe'))
+def run(output,binary=None):
+    d.configure(Path('bundle'),output,Path(binary or '../OctoSense-App-Hub/target/release/card-host.exe'))
     state=output/'state'
     first=apply('golden',kind='expense',title='团子洗护费',date=d.DAY,amount='120',subject='团子',topic='护理',event_title='团子洗护',plan_title='再次护理',plan_date=d.FUTURE_DAY,plan_time='15:00',evidence='用户明确事项及后续安排')
     results=d.run('create',[first,first,d.query(),{'name':'dailyflow.flow_query','args':{}}],state)
@@ -36,4 +36,4 @@ def run(output):
     (output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');print(json.dumps(report,ensure_ascii=False))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);run(p.parse_args().output)
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);args=p.parse_args();run(args.output,args.binary)

@@ -86,8 +86,8 @@ fn event_context_tests(){
     return {"ok": true checks: checks}
 }
 '''
-def run(out):
-    d.configure(ROOT/'bundle',out,ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe')
+def run(out,binary=None):
+    d.configure(ROOT/'bundle',out,Path(binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe'))
     p=out/'bundle/main.splash';s=p.read_text(encoding='utf8').replace('host.request("model.complete",','test_model_request("model.complete",')
     s=s.replace('start_timeout(45,','start_timeout(0.1,')
     s=s.replace('if name == "dailyflow.query" { tools.resolve(token,business_query(a)) return }','if name == "dailyflow.query" { if business_optional(a,"record_id","") == "timeout-test" { event_timeout_test(token) return } if business_optional(a,"record_id","") == "context-test" { tools.resolve(token,event_context_tests()) return } tools.resolve(token,event_agent_tests()) return }')
@@ -101,4 +101,4 @@ def run(out):
     assert all(c['pass'] for c in report['checks']),report
     print(json.dumps(report,ensure_ascii=False))
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);run(p.parse_args().output.resolve())
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);args=p.parse_args();run(args.output.resolve(),args.binary)

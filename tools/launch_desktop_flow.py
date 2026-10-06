@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import native_runtime
 
 from desktop_flow_probe import ROOT, WORKSPACE, stage_local_catalog
 
@@ -136,7 +137,7 @@ def main():
     parser.add_argument("--bundle", type=Path, default=ROOT / "bundle")
     parser.add_argument("--data-dir", type=Path, default=ROOT / ".local-state/desktop")
     parser.add_argument("--core-dir", type=Path, default=default_core_dir())
-    parser.add_argument("--binary", type=Path, default=WORKSPACE / "OctoSense/target/release/octosense.exe")
+    parser.add_argument("--binary", type=Path, default=native_runtime.binary("shell"))
     parser.add_argument("--hidden", action="store_true", help="Developer test: hide the window")
     parser.add_argument("--test-remote-port", type=int, default=0, help="Developer test only: enable local UI test API")
     args = parser.parse_args()

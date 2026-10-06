@@ -1,3 +1,45 @@
+# 四列对话工作区 0.5.2 本地验收
+
+日期：2026-10-06（Asia/Shanghai）。用户要求“继续接入”，本轮仅改 DailyFlow 应用源码、生成包、测试和交接文档。没有修改／重编译 Shell、App Hub、Makepad 或启动器，没有提交、推送或发布。以下结论优先于后面的历史 0.5.1 记录。
+
+## 已接入实际 DailyFlow
+
+- 宽屏为 App 栏、Flow 栏、对话、工作区四列；工作区按需打开。放大隐藏对话并扩展工作区，“恢复”回到原列宽；“收起”保留当前路由，再点“打开工作区”继续原页面。
+- 对话与工作区是保留在树中的独立列，切换布局不重建整棵树。聊天草稿、未保存的编辑字段、搜索文字、年月／日期／视图／Flow 范围保留；布局和浏览操作不写业务数据。仍不承诺草稿或会话跨程序重启。
+- 完整 Shell 使用既有 `on_app_resize` 回调，以**应用内容区 960 逻辑像素**为分界。窄于分界隐藏 Flow 栏，对话与工作区分层查看；拉宽后回到并排。保留“并排查看／单列查看”手动选择，下次窗口尺寸变化重新按可用宽度计算。
+- 独立 card-host 没有该回调，默认单列；窗口较宽时点“并排查看”。此宿主不声称能自动随窗口宽度切换；没有为此修改原生层。
+- 宽屏点“以这一天补记”更新输入语境并显示对话，工作区继续保留；窄屏返回对话。浏览本身不改变补记日期。发送消息也不会自动收掉宽屏工作区。
+- Flow 栏现在在加载后及数据变化时动态刷新，显示真实名称、支出与未完成计划数；移除原来的固定示例描述。保存源账目的更正后，侧栏汇总同步更新。日历留出滚动条空间，短窗口通过纵向滚动查看后续日期和详情。
+
+## 验证证据
+
+全部证据在 `build/four-column-r1/`。使用独立数据目录；种子为历史验收用的合成数据，没有用个人账本测试。运行程序由 `tools/native_runtime.py` 读取 active selector，实际为 `../build/native-update-20261006/OctoSense/target/release/`。
+
+- `wide-final2/report.json`：1280×900 独立宿主实际点击。完整 35 个十月日格、四列排序、工作区宽度 512→1036→512、恢复后的精确布局、聊天／编辑／搜索草稿、关闭重开、跨月和范围、补记、布局切换，以及源记录相同 ID 的保存和侧栏汇总更新。
+- `desktop-final4/report.json`：真正完整 Shell、未注入尺寸回调。宽度 989→759→989 的应用窗口边缘拖动触发四列→单列→四列；放大／恢复、草稿、月份／范围、未保存编辑、保存后的汇总都经点击验证。默认较矮的应用窗口有 28 个可见日格，后续行和补记按钮经滚动可达，不能把不可见行当成缺失或声称全部行同屏。
+- `narrow-final/report.json`：412×892 原有 12 类界面回归通过，包括搜索、浏览／补记、事件图、源账目同 ID 更正、模型不可用无写入、重启、无横向控件越界。
+- `business-final/report.json`：15 次真实 Splash 工具调用通过；`agent-final/report.json`：20 项注入断言与独立短超时通过。**这不是新增的真实 Provider 或系统 Agent 跨 App 验收。**
+- 宽屏、放大、窄屏账本日历、完整 Shell 四列和缩窄截图已查看；控件存在断言不替代截图 QA。最终源码与上述 UI 测试包一致。
+- `final-gate.log`：使用活跃 hub 的 `octo check` 0.5.2 PASSED；未签名且 listing 仍有发布者模板，未发布。文件保护及源包一致性见 `final-audit.json`。开头备份在 `baseline/`；个人数据和原生运行时不作为回退覆盖目标。
+
+保护核对：875 个可读取文件中 871 个未变，原生锁／修复／二进制／selector、DailyFlow 个人业务与 Provider 文件一致。已有个人桌面在运行，运行日志及 3 个新闻缓存更新已单独记录；没有回滚这些后台文件。不能把这一结果表述为整个 `.local-state` 哈希不变。
+
+## 运行与回归
+
+使用现有 `run-dailyflow-ai.cmd`。若程序已经打开，正常关闭后重新启动，以便启动器暂存新包；本轮没有终止用户正在使用的窗口。宽屏打开“日历”或“账本”，工作区右上角有“放大／恢复”和“收起”。独立宿主宽屏需手动选择并排。
+
+构建仍用 `python -X utf8 tools/build_event_app.py`，只编译 00–60 七个模块。测试命令（从 DailyFlow 目录，输出目录必须全新）：
+
+```powershell
+python -X utf8 tools/test_four_column_ui.py --output build/<新目录> --seed build/event-flow-r2/real-final2/apps
+# 完整 Shell 需要带 cryptography 的 Python（本机使用 Codex bundled Python）
+python -X utf8 tools/test_four_column_ui.py --desktop --output build/<新目录> --seed build/event-flow-r2/real-final2/apps/dailyflow
+```
+
+仍未接入农历、拆分可安装 App、Shell Agent 跨 App 工具派发，也未做新 Provider 调用。既有业务协议、双槽持久化和数据数量上限未变。
+
+---
+
 # 对话工作区 0.5.1 本地验收
 
 日期：2026-10-05（Asia/Shanghai）。仅应用层 Splash / 构建与测试脚本 / 文档改动；未修改或重编译 Shell、Hub、Makepad、启动器，未提交或发布。
