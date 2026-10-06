@@ -2,7 +2,7 @@
 
 一个 OctoSense Splash App，帮助你随手记录生活中的事，想起时找回来，并回到原记录继续处理。以对话输入、统一时间协议和后台 Flow 组织为基础，日历按天看，查找围绕事情回看。当前用支出账本、日历事项和经期记录验证；宠物护理只是通用场景。
 
-当前本地版本 **0.6.4**（2026-10-06），未发布。本版补入产品定位、核心概念与Flow的协议作用，没有新增业务能力。左下「帮助」内置离线使用说明，也可从「全部」搜索「使用说明」；正文与 [操作说明](docs/USER_GUIDE.md) 共用内容源。当前设计评估与下一阶段见 [产品路线规划](docs/PRODUCT_ROADMAP.md)，上架流程和差距见 [App Hub 提交说明](docs/APP_HUB_SUBMISSION.md)。
+首次公开版本 **0.1.0**（2026-10-06），对应此前内部开发版 0.6.4；版本号重新从 0.1.0 起算，业务能力与个人数据格式不变，App Hub 尚未入库。本版补入产品定位、核心概念与Flow的协议作用，没有新增业务能力。左下「帮助」内置离线使用说明，也可从「全部」搜索「使用说明」；正文与 [操作说明](docs/USER_GUIDE.md) 共用内容源。当前设计评估与下一阶段见 [产品路线规划](docs/PRODUCT_ROADMAP.md)，上架流程和差距见 [App Hub 提交说明](docs/APP_HUB_SUBMISSION.md)。
 
 0.6.2修复无命名Flow的事项/费用关联，普通日历合并展示同日事项及其费用；旧复合记录按严格凭据备份后补关联，见 [源关联修复](docs/SOURCE_RELATIONS_FIX.md)。查找与时间协议继续保留，见 [按需回顾](docs/FLOW_RECALL.md) 与 [通用时间协议](docs/TIME_EVENT_PROTOCOL.md)。
 
@@ -15,6 +15,8 @@ Windows 双击 `run-dailyflow-ai.cmd`，使用已有完整桌面及 Provider；�
 升级不删除历史个人数据；首次实际写入前保存原容器备份。测试使用 build 下的新隔离目录。旧多应用原型和占位已退出活跃目录，原内容与数据保留在 `archive/legacy-apps/`；旧经期记录不会自动混入新的 period_entries。
 
 ## 开发与文档
+
+- [首次提交正文](docs/APP_HUB_ISSUE_0.1.0.md)：产品介绍、展望、架构与审核信息。
 
 - [模型执行链路与核心架构](docs/AGENT_EXECUTION_ARCHITECTURE.md)：流程图、Prompt与上下文、模块执行边界；修改Agent链路前先读。
 - [操作说明](docs/USER_GUIDE.md)、[协议与模块边界](docs/EVENT_FLOW_PROTOCOL.md)

@@ -21,9 +21,9 @@
   "publisher": {
     "name": "毛茸茸战队",
     "support": "https://github.com/KumaYuriPool/DailyFlow/issues",
-    "privacy_policy_url": "https://github.com/KumaYuriPool/DailyFlow/blob/v0.6.4/PRIVACY.md"
+    "privacy_policy_url": "https://github.com/KumaYuriPool/DailyFlow/blob/v0.1.0/PRIVACY.md"
   },
-  "release_notes": "0.6.4 早期试用：对话与按需工作区；关键词回顾时间线；三个内部模块共用时间协议；同日事项及关联费用在普通日历合并展示；新增产品定位、核心概念和使用说明，帮助独占右侧工作区。仅 Windows 本地验证，已知限制见应用说明与项目文档。",
+  "release_notes": "0.1.0 早期试用：对话与按需工作区；关键词回顾时间线；三个内部模块共用时间协议；同日事项及关联费用在普通日历合并展示；新增产品定位、核心概念和使用说明，帮助独占右侧工作区。仅 Windows 本地验证，已知限制见应用说明与项目文档。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

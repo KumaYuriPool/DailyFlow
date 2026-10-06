@@ -1,5 +1,7 @@
 # DailyFlow 提交 App Hub：当前流程与差距
 
+> 2026-10-06：首次公开版本已按用户决定改为 0.1.0，署名毛茸茸战队，unsigned，暂不附视频。唯一正文见 [0.1.0 Issue 草稿](APP_HUB_ISSUE_0.1.0.md)。用户已授权创建并推送版本标签，尚未要求发送 Issue；以下 0.6.4 为内部开发期历史。
+
 2026-10-06 待审更新：用户指定署名“毛茸茸战队”，确认原KumaYuriPool/Daliy仓库；GitHub返回现名KumaYuriPool/DailyFlow，仍为同一公开仓库。当前已在本地替换占位listing、准备PRIVACY.md、当前合成截图与check/scan材料，见 [0.6.4待审材料](SUBMISSION_REVIEW_0.6.4.md)。用户明确要求审核后才提交，视频由用户自己录；未提交/推送/tag/签名/发Issue/发布。下文“占位资料”记录准备前检查，不代表新的本地草稿仍有同样占位；隐私URL和版本tag仍需审核后实际发布并验证。
 
 核对日期：2026-10-06。已读取上游 main 的最新 [OctoSense README](https://github.com/OctoSense-org/OctoSense/blob/main/README.zh-CN.md)、[App Hub 发布说明](https://github.com/OctoSense-org/OctoSense-App-Hub/blob/main/docs/PUBLISHING.md#submitting) 和 [Design Flow 发布说明](https://github.com/OctoSense-org/OctoScript-App-Design-Flow/blob/main/docs/PUBLISHING.md)。线上文档是流程依据，本地旧文档仅作对照。
