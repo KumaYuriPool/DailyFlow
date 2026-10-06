@@ -1,5 +1,7 @@
 # DailyFlow 4-Bundle 拆分设计方案
 
+> 历史方案，非当前实现。2026-10-06 当前为一个 `dailyflow` bundle，内部记账、日历和 Flow 是伪 App 模块。当前主体身份与按需查询协议见 [MODULE_QUERY_PROTOCOL.md](MODULE_QUERY_PROTOCOL.md)。下文保留作历史参考，不能据此宣称已接入独立 App 间调用。
+
 **日期**：2026-10-02（更新）
 **作者**：DailyFlow 工作区
 **版本**：v0.6（已通过 OctoSense Shell 实际验证）

@@ -1,6 +1,17 @@
 // Expense module owns db.records. Legacy non-expense records never leave this boundary.
 fn expense_snapshot(c){ let out = [] for r in c.records { if r.kind == "expense" { let item = r.to_json().parse_json() item.amount_minor = r.cents item.currency = "CNY" item.record_id = r.id out.push(item) } } return out }
+fn expense_project(r){ let e = time_fields(r.date,"","","occurred",false) e.amount_minor = r.cents e.currency = "CNY" return e }
 fn expense_get(id){ for r in expense_snapshot(db) { if r.id == id { return r } } return nil }
+fn expense_summary_query(q){
+    let amount = 0 let count = 0 let sources = []
+    for r in expense_snapshot(db) {
+        let include = query_member(r,q.selection) && query_day_matches(r.date,q)
+        if q.keyword != "" && r.title.split(q.keyword).len() < 2 { include = false }
+        if q.tag != "" { let found = false for tag in business_optional(r,"user_tags",[]) { if tag == q.tag { found = true } } if !found { include = false } }
+        if include { amount += r.cents count += 1 if sources.len() < 5 { sources.push(query_source_ref(r,"expense",q.selection.subject_id)) } }
+    }
+    return {capability: "expense.summary" amount_minor: amount currency: "CNY" count: count date_from: q.date_from date_to: q.date_to tag: q.tag keyword: q.keyword sources: sources sources_truncated: count > sources.len()}
+}
 fn new_id(c,prefix){ c.seq += 1 return prefix + c.seq }
 fn source_base(c,kind){ return {id: new_id(c,"r") kind: kind revision: 0 title: "" date: "" end_date: "" cents: 0 source: "" due_at: 0 completed_at: 0 reminded_due: 0 status: "recorded" created_at: time_now() updated_at: time_now() flow_ids: [] user_tags: []} }
 fn expense_write(c,a){

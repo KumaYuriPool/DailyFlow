@@ -1,0 +1,86 @@
+// App-independent dated source protocol. Adapters are registered in 38_modules.
+// Day ranges are inclusive civil dates; unknown ends stay unknown, never forecast.
+fn time_adapter(module){ for adapter in time_modules() { if adapter.id == module { return adapter } } return nil }
+fn time_adapter_kind(kind){ for adapter in time_modules() { if adapter.kind == kind { return adapter } } return nil }
+fn tombstone_add(c,module,id,revision){
+    c.tombstones = business_optional(c,"tombstones",[])
+    let identity = "dailyflow/" + module + "/" + id
+    c.tombstones.push({protocol_version: 2 event_id: identity change_id: identity + "/" + revision operation: "delete" source_app: "dailyflow" source_module: module source_record_id: id source_revision: revision deleted_at: time_now()})
+}
+fn protocol_envelope(r,module){
+    let adapter = time_adapter(module) if adapter == nil { return nil }
+    let project = adapter.project let e = project(r)
+    e.protocol_version = 2 e.source_app = "dailyflow" e.source_module = module e.source_record_id = r.id e.source_revision = r.revision e.event_type = adapter.kind
+    e.event_id = "dailyflow/" + module + "/" + r.id e.change_id = e.event_id + "/" + r.revision e.operation = "upsert"
+    e.created_at = r.created_at e.updated_at = r.updated_at e.recorded_at = r.created_at
+    e.flow_ids = r.flow_ids e.summary = r.title
+    e.entry = {target: module record_id: r.id source_revision: r.revision action: "detail" actions: ["detail" "edit" "delete"]}
+    return e
+}
+fn time_fields(date,end,time,status,open_end){
+    let timestamp = "" if time != "" { timestamp = date + "T" + time + ":00+08:00" }
+    let precision = "day" if time != "" { precision = "minute" }
+    let occurred = "" let scheduled = "" if status == "occurred" { occurred = timestamp } if status == "planned" { scheduled = timestamp }
+    return {date: date end_date: end open_end: open_end time: time time_precision: precision timezone: "Asia/Shanghai" occurred_at: occurred scheduled_at: scheduled status: status amount_minor: 0 currency: ""}
+}
+fn source_snapshot(c){
+    let out = []
+    for adapter in time_modules() { let read = adapter.snapshot for r in read(c) { out.push(protocol_envelope(r,adapter.id)) } }
+    for t in business_optional(c,"tombstones",[]) { out.push(t) } return out
+}
+fn source_get(id){ for adapter in time_modules() { let read = adapter.snapshot for r in read(db) { if r.id == id { return r } } } return nil }
+fn source_membership(c,id,fid,link){ for adapter in time_modules() { let update = adapter.membership update(c,id,fid,link) } }
+fn source_write(c,a){ let adapter = time_adapter_kind(a.kind) if adapter == nil { return business_error("不支持的记录类型。") } let write = adapter.write return write(c,a) }
+fn source_remove(c,r){ let adapter = time_adapter_kind(r.kind) if adapter == nil { return business_error("来源未注册。") } let remove = adapter.remove return remove(c,r.id,r.revision) }
+fn time_event_valid(e){
+    if !e.is_object() || (e.protocol_version != 1 && e.protocol_version != 2) || e.source_app != "dailyflow" || time_adapter(e.source_module) == nil { return false }
+    if !e.source_record_id.is_string() || e.source_record_id == "" || !e.source_revision.is_number() || e.source_revision < 1 || floor(e.source_revision) != e.source_revision { return false }
+    if e.operation == "delete" { return true }
+    if e.operation != "upsert" || !valid_date(e.date) { return false }
+    if e.protocol_version == 2 {
+        if !e.end_date.is_string() || !e.open_end.is_bool() || (e.time_precision != "day" && e.time_precision != "minute") || e.timezone != "Asia/Shanghai" { return false }
+        if e.end_date != "" && (!valid_date(e.end_date) || epoch_day(e.end_date) < epoch_day(e.date)) { return false }
+        if e.open_end && e.end_date != "" { return false }
+        if e.status != "occurred" && e.status != "planned" && e.status != "cancelled" { return false }
+        if !e.created_at.is_number() || !e.updated_at.is_number() || e.created_at < 0 || e.updated_at < e.created_at { return false }
+        if e.time_precision == "day" && (e.time != "" || e.occurred_at != "" || e.scheduled_at != "") { return false }
+        if e.time_precision == "minute" {
+            if !regex("^([01][0-9]|2[0-3]):[0-5][0-9]$", "").test(e.time) { return false }
+            let stamp = e.date + "T" + e.time + ":00+08:00"
+            if e.status == "occurred" && (e.occurred_at != stamp || e.scheduled_at != "") { return false }
+            if e.status == "planned" && (e.scheduled_at != stamp || e.occurred_at != "") { return false }
+        }
+    }
+    return true
+}
+fn projection_accept(items,event){
+    let valid = false try { valid = time_event_valid(event) } catch { valid = false } if !valid { return false }
+    let index = 0
+    for old in items {
+        if old.source_app == event.source_app && old.source_module == event.source_module && old.source_record_id == event.source_record_id {
+            if old.source_revision >= event.source_revision { return false }
+            items[index] = event return true
+        } index += 1
+    }
+    items.push(event) return true
+}
+fn time_end(e){ let end = business_optional(e,"end_date","") if business_optional(e,"open_end",false) { return today() } if end == "" { return e.date } return end }
+fn time_overlaps(e,from,to){ return (from == "" || epoch_day(time_end(e)) >= epoch_day(from)) && (to == "" || epoch_day(e.date) <= epoch_day(to)) }
+fn timeline_query(a){
+    if !loaded || locked { return business_error("数据未就绪。") }
+    let from = business_optional(a,"date_from","") let to = business_optional(a,"date_to","") let module = business_optional(a,"source_module","") let fid = business_optional(a,"flow_id","")
+    let limit = business_optional(a,"limit",30) let offset = business_optional(a,"offset",0) let expected = business_optional(a,"snapshot_revision",db.revision)
+    if !from.is_string() || !to.is_string() || !module.is_string() || !fid.is_string() { return business_error("查询条件类型无效。") }
+    if (from != "" && !valid_date(from)) || (to != "" && !valid_date(to)) { return business_error("查询日期无效。") }
+    if from != "" && to != "" && epoch_day(from) > epoch_day(to) { return business_error("日期范围倒置。") }
+    if module != "" && time_adapter(module) == nil { return business_error("来源未注册。") }
+    if !limit.is_number() || limit < 1 || limit > 50 || floor(limit) != limit || !offset.is_number() || offset < 0 || floor(offset) != offset { return business_error("分页参数无效。") }
+    if expected != db.revision || (offset > 0 && business_optional(a,"snapshot_revision",-1) < 0) { return business_error("记录已变化，请从第一页重新查询。") }
+    let items = []
+    for e in source_snapshot(db) { if e.operation == "upsert" && (module == "" || e.source_module == module) && member(e,fid) && time_overlaps(e,from,to) { items.push(e) } }
+    // Stable order on each snapshot; simultaneous records keep registered source order.
+    for i in items.len() { let j = i while j > 0 { if epoch_day(items[j-1].date) <= epoch_day(items[j].date) { break } let temp = items[j-1] items[j-1] = items[j] items[j] = temp j -= 1 } }
+    let page = [] for i in items.len() { if i >= offset && page.len() < limit { page.push(items[i]) } }
+    let next = offset + page.len() let more = next < items.len()
+    return {"ok": true protocol_version: 2 events: page total: items.len() offset: offset next_offset: next has_more: more snapshot_revision: db.revision read_only: true}
+}

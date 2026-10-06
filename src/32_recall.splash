@@ -1,0 +1,56 @@
+// Read-only, on-demand views. Search results are never stored as new Flows.
+fn recall_minute(e){ if e.time == "" { return -1 } let parts = e.time.split(":") return parts[0].to_f64() * 60 + parts[1].to_f64() }
+fn recall_query(a){
+    if !loaded || locked { return business_error("数据未就绪。") }
+    let text = business_optional(a,"text","") let fid = business_optional(a,"flow_id","")
+    let offset = business_optional(a,"offset",0) let limit = business_optional(a,"limit",20)
+    if !text.is_string() || !fid.is_string() || text.len() > 80 { return business_error("请输入80字以内的记录名称。") }
+    text = text.trim()
+    if !offset.is_number() || offset < 0 || floor(offset) != offset || !limit.is_number() || limit < 1 || limit > 50 || floor(limit) != limit { return business_error("分页参数无效。") }
+    if (offset > 0 && business_optional(a,"snapshot_revision",-1) != db.revision) { return business_error("记录已变化，请重新查找。") }
+    if text == "" && fid == "" { return {"ok": true events: [] text: "" flow_id: "" candidates: [] candidate_total: 0 total: 0 offset: 0 next_offset: 0 has_more: false snapshot_revision: db.revision read_only: true} }
+    let candidates = [] let candidate_total = 0 let exact = [] let valid_flow = fid == ""
+    for f in flow_catalog(db) {
+        if f.id == fid { valid_flow = true }
+        if text != "" && f.name.search(text) >= 0 {
+            candidate_total += 1 if candidates.len() < 10 { candidates.push({id: f.id name: f.name}) }
+            if f.name == text { exact.push(f.id) }
+        }
+    }
+    if !valid_flow { return business_error("这个范围已不存在，请重新查找。") }
+    if fid == "" && exact.len() == 1 { fid = exact[0] }
+    let all = [] let found = {} let source_by_id = {}
+    for e in source_snapshot(db) { if e.operation == "upsert" {
+        all.push(e) source_by_id[e.source_record_id] = e
+        if fid != "" && member(e,fid) { found[e.source_record_id] = "同属「" + flow_name(fid) + "」" }
+        else { if fid == "" && text != "" && e.summary.search(text) >= 0 { found[e.source_record_id] = "名称匹配" } }
+    } }
+    for candidate in candidates {
+        let count = 0 let first = ""
+        for e in all { if member(e,candidate.id) { count += 1 if first == "" || epoch_day(e.date) < epoch_day(first) { first = e.date } } }
+        candidate.label = candidate.name + " · " + count + " 条" if first != "" { candidate.label += " · " + first + " 起" }
+    }
+    // Traverse only persisted typed edges. Shared subject or similar text is not an edge.
+    let neighbors = {} let queue = [] let cursor = 0
+    for e in all { if found[e.source_record_id] != nil { queue.push(e.source_record_id) } }
+    for edge in flow_relations(db) { if (edge.type == "expense_for" || edge.type == "follow_up" || edge.type == "fulfills") && relation_visible(edge,fid) {
+        if source_by_id[edge.from_node] != nil && source_by_id[edge.to_node] != nil {
+            if neighbors[edge.from_node] == nil { neighbors[edge.from_node] = [] }
+            if neighbors[edge.to_node] == nil { neighbors[edge.to_node] = [] }
+            neighbors[edge.from_node].push(edge.to_node) neighbors[edge.to_node].push(edge.from_node)
+        }
+    } }
+    while cursor < queue.len() {
+        let id = queue[cursor] cursor += 1
+        if neighbors[id] != nil { for next in neighbors[id] { if found[next] == nil { found[next] = "与「" + source_by_id[id].summary + "」有已确认关联" queue.push(next) } } }
+    }
+    let items = [] for e in all { if found[e.source_record_id] != nil { e.match_reason = found[e.source_record_id] items.push(e) } }
+    // Civil day first, then known minute within that day. Empty minute stays unspecified.
+    for i in items.len() { let j = i while j > 0 {
+        let left = items[j-1] let right = items[j]
+        if epoch_day(left.date) < epoch_day(right.date) || (left.date == right.date && recall_minute(left) <= recall_minute(right)) { break }
+        let temp = items[j-1] items[j-1] = items[j] items[j] = temp j -= 1
+    } }
+    let page = [] for i in items.len() { if i >= offset && page.len() < limit { page.push(items[i]) } }
+    return {"ok": true events: page text: text flow_id: fid candidates: candidates candidate_total: candidate_total total: items.len() offset: offset next_offset: offset + page.len() has_more: offset + page.len() < items.len() snapshot_revision: db.revision read_only: true}
+}

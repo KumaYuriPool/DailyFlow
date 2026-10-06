@@ -43,9 +43,9 @@ def run(probe, desktop=False):
     ui = UI(probe)
     initial = ui.state()
     if not desktop:
-        ui.click('并排查看')
+        ui.click('并排')
     else:
-        ui.find('单列查看')  # Real on_app_resize, no script injection.
+        ui.find('单列')  # Real on_app_resize, no script injection.
     ui.fill('chat_input', '尚未发送的四列草稿')
     ui.click('日历')
     ui.click('团子 · 洗护', ty='Button')
@@ -75,7 +75,7 @@ def run(probe, desktop=False):
     assert rectangle(probe, 'chat_column') == chat
     assert ui.find(ident='chat_input')['t'] == '尚未发送的四列草稿'
     ui.click('收起')
-    ui.click('打开工作区')
+    ui.click(ident='workspace_toggle')
     assert ui.find(ident='date_jump')['t'] == '2026-10-04'
     ui.find('账本日历 ▾')
     ui.find('此事件')
@@ -94,7 +94,7 @@ def run(probe, desktop=False):
         ui.fill(ident, value)
     ui.click('放大')
     ui.click('收起')
-    ui.click('打开工作区')
+    ui.click(ident='workspace_toggle')
     ui.click('恢复')
     for ident, value in fields.items():
         assert ui.find(ident=ident)['t'] == value
@@ -115,12 +115,12 @@ def run(probe, desktop=False):
         assert ui.find(ident='chat_input')['t'] == '尚未发送的四列草稿'
         ui.evidence('05-auto-wide')
     else:
-        ui.click('单列查看')
+        ui.click('单列')
         ui.find('回到对话')
         ui.click('回到对话')
         assert ui.find(ident='chat_input')['t'] == '尚未发送的四列草稿'
-        ui.click('并排查看')
-        ui.click('打开工作区')
+        ui.click('并排')
+        ui.click(ident='workspace_toggle')
         ui.find('放大')
     assert ui.state() == initial, 'Layout, search, browsing and uncommitted drafts must not write business data'
     ui.click('账本', ty='Button')

@@ -1,0 +1,45 @@
+// Shared identities for the in-process modules; no independent App/IPC is implied.
+fn subject_id_for_flow(f){ return business_optional(f,"subject_id","dailyflow.subject." + f.id) }
+fn subject_register_flow(c,f,reuse){
+    let name = business_optional(f,"subject","") if name == "" { return }
+    c.subjects = business_optional(c,"subjects",[]) let sid = subject_id_for_flow(f)
+    if reuse { let matches = [] for s in c.subjects { if s.name == name { matches.push(s) } } if matches.len() == 1 { sid = matches[0].id } }
+    let found = false for s in c.subjects { if s.id == sid { found = true } }
+    if !found { c.subjects.push({id: sid name: name}) }
+    f.subject_id = sid
+}
+fn subject_catalog(c){
+    let out = []
+    for f in flow_catalog(c) { let name = business_optional(f,"subject","") if name != "" {
+        let sid = subject_id_for_flow(f) let found = false
+        for s in out { if s.id == sid { s.flow_ids.push(f.id) found = true } }
+        if !found { out.push({id: sid name: name flow_ids: [f.id]}) }
+    } }
+    return out
+}
+fn subject_storage_valid(c){
+    let subjects = business_optional(c,"subjects",[]) if !subjects.is_array() || subjects.len() > 160 { return false }
+    let ids = [] for s in subjects {
+        if !s.id.is_string() || s.id == "" || s.id.len() > 180 || !s.name.is_string() || s.name == "" || s.name.len() > 500 { return false }
+        for id in ids { if id == s.id { return false } } ids.push(s.id)
+    }
+    for f in c.flows { let sid = business_optional(f,"subject_id","") if sid != "" {
+        let found = false for s in subjects { if s.id == sid && s.name == business_optional(f,"subject","") { found = true } }
+        if !found { return false }
+    } }
+    return true
+}
+fn subject_resolve_query(a){
+    let sid = business_optional(a,"subject_id","") let name = business_optional(a,"subject","") let fid = business_optional(a,"flow_id","")
+    if !sid.is_string() || !name.is_string() || !fid.is_string() { return {"ok": false message: "主体字段无效。"} }
+    if sid == "" && name == "" && fid == "" { return {"ok": true subject_id: "" name: "全部" flow_ids: []} }
+    if sid == "" && name == "" && fid != "" { for f in flow_catalog(db) { if f.id == fid && business_optional(f,"subject","") == "" { return {"ok": true subject_id: "dailyflow.flow." + fid name: f.name flow_ids: [fid]} } } }
+    let matches = [] for s in subject_catalog(db) {
+        let include = (sid == "" || s.id == sid) && (name == "" || s.name == name)
+        if fid != "" { let found = false for id in s.flow_ids { if id == fid { found = true } } if !found { include = false } }
+        if include { matches.push(s) }
+    }
+    if matches.len() != 1 { return {"ok": false message: "主体不存在、条件不符或有同名主体，请明确选择。"} }
+    return {"ok": true subject_id: matches[0].id name: matches[0].name flow_ids: matches[0].flow_ids}
+}
+fn query_member(r,selection){ if selection.subject_id == "" { return true } for fid in selection.flow_ids { if member(r,fid) { return true } } return false }

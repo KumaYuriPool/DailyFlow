@@ -5,11 +5,11 @@ import business_test_driver as d
 from test_event_flow import apply,data
 ROOT=Path(__file__).resolve().parents[1]
 
-def run(out):
-    d.configure(ROOT/'bundle',out,ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe')
+def run(out,binary=None):
+    d.configure(ROOT/'bundle',out,binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe')
     # A real minimal Splash app loads only the projection reducer, no expense UI/store.
-    main=(ROOT/'src/20_calendar.splash').read_text(encoding='utf8')
-    reducer=main[main.index('fn projection_accept'):main.index('fn calendar_rebuild')]
+    main=(ROOT/'src/08_time_protocol.splash').read_text(encoding='utf8')
+    reducer=(ROOT/'src/00_storage.splash').read_text(encoding='utf8')+'\n'+main+'\nfn time_modules(){ return [{id: "expense"}] }\n'
     fixture='''
 fn on_agent_tool(token,name,args_json){
     let items = [] let up = {protocol_version: 1 source_app: "dailyflow" source_module: "expense" source_record_id: "x" source_revision: 2 operation: "upsert" amount_minor: 11000 date: "2026-10-04"}
@@ -45,4 +45,4 @@ SolidView{width: Fill height: Fill Label{text: "Protocol fixture"}}
     (out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');print(json.dumps(report,ensure_ascii=False))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);run(p.parse_args().output.resolve())
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);a=p.parse_args();run(a.output.resolve(),a.binary)

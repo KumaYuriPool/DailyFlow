@@ -101,7 +101,7 @@ fn valid_db_fields(v){
         for fid in r.flow_ids { let exists = false for f in v.flows { if f.id == fid { exists = true } } if !exists { return false } }
     }
     for a in v.alerts { if !a.is_object() { return false } if !a.key.is_string() || !a.text.is_string() || !a.record_id.is_string() || !a.active.is_bool() { return false } }
-    return v.period_enabled.is_bool() && v.private_hidden.is_bool() && v.budget_notified.is_bool() && v.budget_month.is_string() && business_valid_additions(v) && event_storage_valid(v)
+    return v.period_enabled.is_bool() && v.private_hidden.is_bool() && v.budget_notified.is_bool() && v.budget_month.is_string() && business_valid_additions(v) && event_storage_valid(v) && subject_storage_valid(v) && period_storage_valid(v)
 }
 fn write_checked(path,text){
     let success = false
@@ -141,7 +141,7 @@ fn boot(){
     if !va && !vb && (fs.exists("state-a.json") || fs.exists("state-b.json")) { locked = true message = "存储损坏，已停止写入；请从备份恢复。" }
     if !va && !vb && !locked && fs.exists("expenses.json") { message = "检测到旧账本；设置中可导入，原文件不会改动。" }
     selected = today() let t = selected.split("-") yy = t[0].to_f64() mm = t[1].to_f64() jump_date = selected context_date = selected
-    loaded = true calendar_rebuild()
+    loaded = true repair_source_relations() calendar_rebuild()
     redraw()
 }
 fn shift_month(delta){

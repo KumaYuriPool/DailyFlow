@@ -1,4 +1,26 @@
-# 2026-10-04 当前交接：对话工作区设计与 0.4.0 实际版本
+# 当前交接：0.6.4 产品定位与新路线规划
+
+当前产品方向、价值、概念、成熟度判断和阶段建议见 [PRODUCT_ROADMAP](PRODUCT_ROADMAP.md)。旧愿景继续保留。内置说明新增定位与概念，Flow节解释通用时间协议、源事实和按需回顾，共9节；只改文案与规划，未接通新的对话查找或外部App。宽窄帮助UI验收、gate和保护核对见build/product-roadmap-r1及根agent.md。本次未改业务/原生/个人数据，未提交发布。
+
+## 0.6.3 内置使用说明
+
+左下「帮助」或全部搜索「使用说明」，离线七节指南，src/user_guide.json构建嵌入并生成USER_GUIDE.md；新增55_help，15个编译模块。宽窄屏真实点击、返回/草稿保留和unsigned gate通过，见 build/help-guide-r1。上游README及App Hub提交流程、当前商店材料差距和验证边界见 [APP_HUB_SUBMISSION](APP_HUB_SUBMISSION.md)。未改业务协议或个人数据，未改原生/Provider/启动器，未提交发布。
+
+## 0.6.2 无命名 Flow 的源关联修复
+
+允许独立expense_for/follow_up/fulfills，普通日历同日事项＋明确费用显示一项；对话移除日历快捷动作，详情保留定位。新增39_relation_repair，当前14模块，启动时严格凭据验证并备份后补回旧无Flow复合关联。个人状态本轮未直接改写，需正常重开加载。见 [SOURCE_RELATIONS_FIX](SOURCE_RELATIONS_FIX.md) 及根agent.md最新节。
+
+## 0.6.1 按需查找与时间线（历史）
+
+已移除常驻Flow栏，新增查找工作区和只读dailyflow.recall，按名字/关键词与明确关联生成临时时间线。当前13模块，详情见 [FLOW_RECALL](FLOW_RECALL.md)。不是任意自然语言检索，无新增Provider调用；原型中的聊天查找勿当成已实现能力。
+
+## 0.6.0 通用时间协议与经期来源（历史）
+
+2026-10-06 最新实现见 [TIME_EVENT_PROTOCOL](TIME_EVENT_PROTOCOL.md) 及项目AGENTS/根agent.md顶部。当前单包12模块，记账、日历、经期通过注册式时间协议协作；普通日历自动消费经期日期区间。协议29调用/模块39调用/原业务15调用/Agent43注入断言和一次真实Provider经期查询均有隔离证据。旧0.4–0.5交接保留历史。
+
+用户已确认Flow后台组织、按需回顾是后续界面方向；本轮没有移除现有Flow栏。经期成为第三伪App是新明确授权，覆盖旧删减范围。独立App通信、多时区、预测、发布均未交付。
+
+## 2026-10-04 历史交接：对话工作区设计与 0.4.0 实际版本
 
 最新产品方向见 [对话工作区设计](CONVERSATION_WORKSPACE_DESIGN.md)：双左栏 App/Flow、中间对话、右侧可搜索应用工作区；日历独立于 App，普通/账本视图收进可搜索的视图下拉；日格日期居中、选中为圆形。本次只更新设计预览和文档，当前 0.4.0 应用尚未实现这套界面。不要把未来多 App 导航设计理解为现在拆 App 或恢复旧四 bundle。
 

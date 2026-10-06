@@ -1,0 +1,38 @@
+// Third pseudo App: factual date intervals only. Archived v1 records stay archived.
+fn period_snapshot(c){ return business_optional(c,"period_entries",[]).to_json().parse_json() }
+fn period_storage_valid(c){
+    let records = business_optional(c,"period_entries",[]) if !records.is_array() || records.len() > 800 { return false }
+    let ids = [] for r in records {
+        if r.kind != "period_entry" || !r.id.is_string() || !r.title.is_string() || !valid_date(r.date) || !r.end_date.is_string() || !r.flow_ids.is_array() || r.revision < 1 || r.created_at < 0 || r.updated_at < r.created_at { return false }
+        if r.end_date != "" && (!valid_date(r.end_date) || epoch_day(r.end_date) < epoch_day(r.date)) { return false }
+        for id in ids { if id == r.id { return false } } ids.push(r.id)
+    } return true
+}
+fn period_write(c,a){
+    let end = business_optional(a,"end_date","")
+    if !valid_date(a.date) || epoch_day(a.date) > epoch_day(today()) || !end.is_string() { return business_error("请填写已经发生的开始日期。") }
+    if end != "" && (!valid_date(end) || epoch_day(end) < epoch_day(a.date) || epoch_day(end) > epoch_day(today())) { return business_error("结束日期须在开始日期之后或同日，且不能是未来。") }
+    let rows = period_snapshot(c) let current = nil
+    for r in rows { if r.id == a.record_id { current = r } }
+    if a.record_id != "" && (current == nil || current.revision != a.expected_revision) { return business_error("记录已变化，请刷新。") }
+    let last = end if last == "" { last = today() }
+    for r in rows { if r.id != a.record_id {
+        let other_end = r.end_date if other_end == "" { other_end = today() }
+        if epoch_day(a.date) <= epoch_day(other_end) && epoch_day(last) >= epoch_day(r.date) { return business_error("这段日期已有经期记录，请打开原记录更正。") }
+    } }
+    if current == nil { if a.expected_revision != 0 || rows.len() >= 800 { return business_error("修订或容量无效。") } current = {id: new_id(c,"period") kind: "period_entry" title: "经期" date: "" end_date: "" time: "" status: "occurred" revision: 0 created_at: time_now() updated_at: time_now() flow_ids: []} rows.push(current) }
+    current.date = a.date current.end_date = end current.revision += 1 current.updated_at = time_now() c.period_entries = rows
+    return {"ok": true record_id: current.id}
+}
+fn period_remove(c,id,revision){ let rows = [] let found = false for r in period_snapshot(c) { if r.id == id { if r.revision != revision { return business_error("记录已变化。") } found = true } else { rows.push(r) } } if !found { return business_error("记录不存在。") } c.period_entries = rows tombstone_add(c,"period",id,revision+1) return {"ok": true record_id: id} }
+fn period_membership(c,id,fid,link){ let rows = period_snapshot(c) for r in rows { if r.id == id { let ids = [] for old in r.flow_ids { if old != fid { ids.push(old) } } if link { ids.push(fid) } if ids.to_json() != r.flow_ids.to_json() { r.flow_ids = ids r.revision += 1 r.updated_at = time_now() } } } c.period_entries = rows }
+fn period_project(r){ return time_fields(r.date,r.end_date,"","occurred",r.end_date == "") }
+fn period_history_query(q){
+    let events = [] let sources = [] let count = 0
+    let rows = period_snapshot(db)
+    for i in rows.len() { let j = i while j > 0 { if epoch_day(rows[j-1].date) >= epoch_day(rows[j].date) { break } let old = rows[j-1] rows[j-1] = rows[j] rows[j] = old j -= 1 } }
+    for r in rows { let e = period_project(r) if query_member(r,q.selection) && time_overlaps(e,q.date_from,q.date_to) {
+        count += 1 if events.len() < 20 { events.push({title: "经期" date: r.date end_date: r.end_date time: ""}) sources.push(query_source_ref(r,"period",q.selection.subject_id)) }
+    } }
+    return {capability: "period.history" count: count events: events sources: sources sources_truncated: count > sources.len() date_from: q.date_from date_to: q.date_to}
+}

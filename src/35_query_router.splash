@@ -1,0 +1,44 @@
+// Read-only dispatch between pseudo Apps inside the single DailyFlow bundle.
+fn module_capabilities(){ let out = [] for cap in query_capabilities() { out.push({id: cap.id module: cap.module name: cap.name description: cap.description}) } return out }
+fn module_query_schema(){ let ids = [] for cap in query_capabilities() { ids.push(cap.id) } return {type: "array" minItems: 1 maxItems: 2 items: {type: "object" additionalProperties: false required: ["capability"] properties: {
+    capability: {type: "string" enum: ids}
+    period: {type: "string" enum: ["all" "today" "this_month" "last_month"]}
+    date_from: {type: "string"} date_to: {type: "string"} tag: {type: "string" maxLength: 40} keyword: {type: "string" maxLength: 180}
+}}} }
+fn query_dates(a){
+    let period = business_optional(a,"period","all") let from = business_optional(a,"date_from","") let to = business_optional(a,"date_to","")
+    if !period.is_string() || !from.is_string() || !to.is_string() { return {"ok": false message: "日期条件类型无效。"} }
+    if period != "all" && (from != "" || to != "") { return {"ok": false message: "日期范围与期间不能同时指定。"} }
+    let t = today().split("-") let y = t[0].to_f64() let m = t[1].to_f64()
+    if period == "today" { from = today() to = today() }
+    else { if period == "this_month" || period == "last_month" {
+        if period == "last_month" { m -= 1 if m == 0 { y -= 1 m = 12 } }
+        from = date_text(y,m,1) to = date_text(y,m,month_days(y,m))
+    } else { if period != "all" { return {"ok": false message: "不支持的查询期间。"} } } }
+    if (from != "" && !valid_date(from)) || (to != "" && !valid_date(to)) { return {"ok": false message: "查询日期无效。"} }
+    if from != "" && to != "" && epoch_day(from) > epoch_day(to) { return {"ok": false message: "查询开始日期晚于结束日期。"} }
+    return {"ok": true date_from: from date_to: to}
+}
+fn query_day_matches(day,q){ return (q.date_from == "" || epoch_day(day) >= epoch_day(q.date_from)) && (q.date_to == "" || epoch_day(day) <= epoch_day(q.date_to)) }
+fn query_source_ref(r,module,sid){ return {source_app: "dailyflow" source_module: module source_record_id: r.id source_revision: r.revision subject_id: sid title: r.title date: r.date entry: {target: module record_id: r.id action: "detail"}} }
+fn module_query(a){
+    if !loaded || locked { return {"ok": false message: "数据尚未就绪。"} }
+    let selection = subject_resolve_query(a) if !selection["ok"] { return selection }
+    let queries = business_optional(a,"queries",[]) if !queries.is_array() || queries.len() < 1 || queries.len() > 2 { return {"ok": false message: "一次请选择1至2项查询能力。"} }
+    let validated = [] let seen = []
+    for plan in queries {
+        let capability = business_optional(plan,"capability","") let known = false for c in module_capabilities() { if c.id == capability { known = true } }
+        if !known { return {"ok": false message: "不支持的只读查询能力。"} }
+        for old in seen { if old == capability { return {"ok": false message: "同一查询能力不能重复。"} } } seen.push(capability)
+        let dates = query_dates(plan) if !dates["ok"] { return dates }
+        let tag = business_optional(plan,"tag","") let keyword = business_optional(plan,"keyword","")
+        if !tag.is_string() || tag.len() > 40 || !keyword.is_string() || keyword.len() > 180 { return {"ok": false message: "标签或关键词条件无效。"} }
+        for cap in query_capabilities() { if cap.id == capability { if !cap.tags && tag != "" { return business_error("此来源不支持标签条件。") } if !cap.keywords && keyword != "" { return business_error("此来源不支持关键词条件。") } } }
+        validated.push({capability: capability selection: selection date_from: dates.date_from date_to: dates.date_to tag: tag keyword: keyword})
+    }
+    let results = [] let used = []
+    for q in validated {
+        for cap in query_capabilities() { if cap.id == q.capability { let run = cap.run results.push(run(q)) used.push(cap.module) } }
+    }
+    return {"ok": true selection: selection modules_used: used results: results read_only: true}
+}

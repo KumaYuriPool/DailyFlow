@@ -1,9 +1,5 @@
 // Atomic coordinator, module contracts and compatibility tool adapter.
 let business_tool_queue = []
-fn tombstone_add(c,module,id,revision){
-    c.tombstones = business_optional(c,"tombstones",[])
-    c.tombstones.push({protocol_version: 1 change_id: module + "-" + id + "-" + revision operation: "delete" source_app: "dailyflow" source_module: module source_record_id: id source_revision: revision date: today() occurred_at: today() time_precision: "day" timezone: "Asia/Shanghai" summary: "" entry: {target: module record_id: id action: "detail"}})
-}
 fn event_storage_valid(c){
     let events = business_optional(c,"calendar_events",[]) let relations = business_optional(c,"relations",[]) let tombstones = business_optional(c,"tombstones",[])
     if !events.is_array() || events.len() > 800 || !relations.is_array() || relations.len() > 6000 || !tombstones.is_array() || tombstones.len() > 1600 { return false }
@@ -14,13 +10,17 @@ fn event_storage_valid(c){
         for id in ids { if e.id == id { return false } } ids.push(e.id)
         for fid in e.flow_ids { let exists = false for f in c.flows { if f.id == fid { exists = true } } if !exists { return false } }
     }
-    let sources = [] for e in expense_snapshot(c) { sources.push(e) } for e in events { sources.push(e) }
+    let sources = [] for adapter in time_modules() { let read = adapter.snapshot for e in read(c) { sources.push(e) } }
+    let source_ids = [] for r in sources {
+        for id in source_ids { if id == r.id { return false } } source_ids.push(r.id)
+        for fid in r.flow_ids { let found = false for f in c.flows { if f.id == fid { found = true } } if !found { return false } }
+    }
     for r in relations {
         if r.type != "belongs_to" && r.type != "expense_for" && r.type != "follow_up" && r.type != "fulfills" { return false }
         let from = nil let to = nil let group = false for f in c.flows { if f.id == r.flow_id { group = true } }
         for e in sources { if e.id == r.from_node { from = e } if e.id == r.to_node { to = e } }
-        if !group || from == nil || !member(from,r.flow_id) { return false }
-        if r.type == "belongs_to" { if r.to_node != r.flow_id { return false } } else {
+        if !r.flow_id.is_string() || (r.flow_id != "" && !group) || from == nil || !member(from,r.flow_id) { return false }
+        if r.type == "belongs_to" { if r.flow_id == "" || r.to_node != r.flow_id { return false } } else {
             if to == nil || !member(to,r.flow_id) || from.id == to.id { return false }
             if from.kind != "event" { return false }
             if r.type == "expense_for" { if to.kind != "expense" || from.status != "occurred" { return false } }
@@ -28,14 +28,14 @@ fn event_storage_valid(c){
             if r.type == "fulfills" && (from.status != "occurred" || to.status != "planned") { return false }
         }
     }
-    for t in tombstones { if t.protocol_version != 1 || t.operation != "delete" || !t.source_record_id.is_string() || !(t.source_revision >= 1) { return false } }
+    for t in tombstones { if (t.protocol_version != 1 && t.protocol_version != 2) || t.operation != "delete" || !t.source_record_id.is_string() || !(t.source_revision >= 1) { return false } }
     return true
 }
-fn source_get(id){ let e = expense_get(id) if e != nil { return e } return calendar_get(id) }
 fn input_defaults(a){
     let out = {category: business_optional(a,"category","") request_id: business_optional(a,"request_id","") operation: business_optional(a,"operation","") record_id: business_optional(a,"record_id","") kind: business_optional(a,"kind","") title: business_optional(a,"title","") date: business_optional(a,"date","") amount: business_optional(a,"amount","") time: business_optional(a,"time","") status: business_optional(a,"status","") subject: business_optional(a,"subject","") topic: business_optional(a,"topic","") flow_id: business_optional(a,"flow_id","") event_title: business_optional(a,"event_title","") plan_title: business_optional(a,"plan_title","") plan_date: business_optional(a,"plan_date","") plan_time: business_optional(a,"plan_time","") related_event_id: business_optional(a,"related_event_id","") fulfills_id: business_optional(a,"fulfills_id","") evidence: business_optional(a,"evidence","") match_title: business_optional(a,"match_title","") match_date: business_optional(a,"match_date","") match_amount: business_optional(a,"match_amount","")}
     out.expected_revision = business_optional(a,"expected_revision",0) out.user_tags = business_optional(a,"user_tags",[]) out.flow_names = business_optional(a,"flow_names",[])
     if out.operation == "" { out.operation = "save" } if out.kind == "" { out.kind = "expense" } if out.status == "" { out.status = "occurred" }
+    if out.kind == "period_entry" { out.end_date = business_optional(a,"end_date","") }
     return out
 }
 fn coordinator_apply(args,tracked){
@@ -54,12 +54,11 @@ fn coordinator_apply(args,tracked){
     if tracked && receipts.len() >= 128 { return business_error("自动收据已达 128 条；手工操作仍可继续，请先导出。") }
     let c = clone_db() let record_id = a.record_id let fid = a.flow_id let ids = []
     if a.operation == "save" {
-        if a.kind != "expense" && a.kind != "event" { return business_error("仅支持记账和事件。") }
+        if time_adapter_kind(a.kind) == nil { return business_error("未注册的记录类型。") }
+        if a.kind == "period_entry" && (a.subject != "" || a.flow_id != "" || a.event_title != "" || a.plan_title != "" || a.related_event_id != "" || a.fulfills_id != "" || a.flow_names.len() > 0) { return business_error("经期记录请独立保存，不自动关联当前事件。") }
         let resolved = flow_resolve(c,a.subject,a.topic,fid) if !resolved["ok"] { return resolved } fid = resolved.flow_id
         let subjects = [] if a.subject != "" { subjects.push(a.subject) }
-        let result = nil
-        if a.kind == "expense" { result = expense_write(c,a) }
-        else { a.subject_refs = subjects result = calendar_write(c,a) }
+        a.subject_refs = subjects let result = source_write(c,a)
         if !result["ok"] { return result } record_id = result.record_id
         flow_link(c,record_id,fid)
         // Compatibility: explicit old flow names can still link supported sources.
@@ -76,18 +75,18 @@ fn coordinator_apply(args,tracked){
         }
         if a.related_event_id != "" {
             let target = nil for e in calendar_snapshot(c) { if e.id == a.related_event_id && member(e,fid) { target = e } }
-            if target == nil || fid == "" { return business_error("关联事项不明确，请选择同一事件中的事项。") }
+            if target == nil { return business_error("关联事项不明确，请选择有效事项。") }
             if a.kind == "expense" { if target.status != "occurred" { return business_error("实际费用不能挂到未发生事项。") } event_id = target.id }
             if a.kind == "event" && a.status == "planned" { relation_add(c,fid,"follow_up",target.id,record_id,a.evidence) }
         }
         if a.kind == "expense" && event_id != "" { relation_add(c,fid,"expense_for",event_id,record_id,a.evidence) }
         if a.plan_title != "" {
-            if event_id == "" || fid == "" { return business_error("后续计划缺少所属事件，请先澄清。") }
+            if event_id == "" { return business_error("后续计划缺少所属事项，请先澄清。") }
             let result = calendar_write(c,{record_id: "" expected_revision: 0 title: a.plan_title date: a.plan_date time: a.plan_time status: "planned" subject_refs: subjects})
             if !result["ok"] { return result } flow_link(c,result.record_id,fid) relation_add(c,fid,"follow_up",event_id,result.record_id,a.evidence)
         }
         if a.fulfills_id != "" {
-            if a.kind != "event" || a.status != "occurred" || fid == "" { return business_error("完成关系需要明确发生事项与计划。") }
+            if a.kind != "event" || a.status != "occurred" { return business_error("完成关系需要明确发生事项与计划。") }
             let valid_plan = false for plan in calendar_snapshot(c) { if plan.id == a.fulfills_id && plan.status == "planned" && member(plan,fid) { valid_plan = true } }
             if !valid_plan { return business_error("请选择同一事件中的计划。") }
             relation_add(c,fid,"fulfills",record_id,a.fulfills_id,a.evidence)
@@ -97,7 +96,7 @@ fn coordinator_apply(args,tracked){
         else {
             let source = source_get(record_id) if source == nil || source.revision != a.expected_revision { return business_error("源记录不存在或已变化，请刷新。") }
             if a.operation == "delete" {
-                let result = nil if source.kind == "expense" { result = expense_remove(c,record_id,a.expected_revision) } else { result = calendar_remove(c,record_id,a.expected_revision) }
+                let result = source_remove(c,source)
                 if !result["ok"] { return result } flow_drop_source(c,record_id)
             } else {
                 if a.operation != "link" && a.operation != "unlink" { return business_error("操作无效。") }
@@ -119,7 +118,8 @@ fn coordinator_apply(args,tracked){
     for e in source_snapshot(c) { if e.operation == "upsert" && e.source_record_id == record_id { ids = e.flow_ids } }
     if tracked { c.receipts = business_optional(c,"receipts",[]) c.receipts.push({request_id: a.request_id payload: payload record_id: record_id flow_ids: ids}) }
     if !persist(c) { return business_error(message) }
-    return {"ok": true record_id: record_id flow_ids: ids message: "已保存，日历、账本与事件已同步。" replayed: false}
+    let saved_message = "已保存，日历、账本与事件已同步。" if a.kind == "period_entry" { saved_message = "经期记录已保存。" }
+    return {"ok": true record_id: record_id flow_ids: ids message: saved_message replayed: false}
 }
 fn business_save(a){
     let result = business_error("业务处理失败，结果未确认；请先查询原请求。")
@@ -156,7 +156,11 @@ fn business_drain_tools(){ let pending = business_tool_queue business_tool_queue
 fn business_dispatch_tool(token,name,args_json){
     let tools = mod.app_tools try {
         let a = args_json.parse_json()
+        if name == "dailyflow.recall" { tools.resolve(token,recall_query(a)) return }
+        if name == "dailyflow.timeline_query" { tools.resolve(token,timeline_query(a)) return }
         if name == "dailyflow.query" { tools.resolve(token,business_query(a)) return }
+        if name == "dailyflow.capabilities" { tools.resolve(token,{"ok": true app: "dailyflow" modules: module_capabilities() subjects: subject_catalog(db)}) return }
+        if name == "dailyflow.module_query" { tools.resolve(token,module_query(a)) return }
         if name == "dailyflow.flow_query" { tools.resolve(token,flow_query(business_optional(a,"flow_id",""))) return }
         if name == "dailyflow.save_record" || name == "dailyflow.apply" { let result = business_save(a) if result["ok"] { message = result.message redraw() } tools.resolve(token,result) return }
         tools.reject(token,"未声明工具。")

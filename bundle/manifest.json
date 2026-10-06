@@ -16,12 +16,12 @@
   ],
   "id": "dailyflow",
   "integrity": {
-    "bundle_blake3": "ba2432afe316e0f437b1bb0fa15989694a5e46dbce2fd53ffea1895eec370331"
+    "bundle_blake3": "d015c93cd1e7e06a948955072de0c09232e0560eaedd7c98c5b455a3ca70c680"
   },
   "name": "DailyFlow",
   "schema": 1,
   "storage": {
     "agent_workspace": "none"
   },
-  "version": "0.5.2"
+  "version": "0.6.4"
 }

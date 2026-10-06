@@ -1,5 +1,9 @@
 # 事件 Flow 应用内协议（0.4.0）
 
+0.6.2修订：expense_for/follow_up/fulfills允许空flow_id，belongs_to仍需容器；明确源关系不再依赖命名Flow。按范围消费全局边需两端均可见。普通日历同日组合与旧收据修复规则见 [SOURCE_RELATIONS_FIX](SOURCE_RELATIONS_FIX.md)。
+
+2026-10-06 更新：公共时间包装和投影已抽离到 08_time_protocol，注册入口在 38_modules，经期为第三个伪 App。当前 v2 字段、查询与边界见 [TIME_EVENT_PROTOCOL](TIME_EVENT_PROTOCOL.md)。下文保留0.4.0业务基线；尤其 occurred_at、模块集合和文件归属以新协议为准。
+
 2026-10-04。一个 App：`source_app=dailyflow`。协议版本 1；数据库仍为 schema_version=1，新增 event_flow_version=2。P0/P1 文档与本实现约定共同作为接手入口。
 
 ## 权威边界

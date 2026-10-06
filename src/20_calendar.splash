@@ -4,6 +4,21 @@ let calendar_mode = "ordinary"
 let scope_current = false
 fn calendar_snapshot(c){ return business_optional(c,"calendar_events",[]).to_json().parse_json() }
 fn calendar_get(id){ for e in calendar_snapshot(db) { if e.id == id { return e } } return nil }
+fn calendar_next_query(q){
+    let selected = [] let count = 0
+    for e in calendar_snapshot(db) {
+        let include = e.status == "planned" && !flow_plan_fulfilled(e.id) && query_member(e,q.selection) && query_day_matches(e.date,q) && epoch_day(e.date) >= epoch_day(today())
+        if q.keyword != "" && e.title.split(q.keyword).len() < 2 { include = false }
+        if include {
+            count += 1 let minutes = 0 if e.time != "" { let t = e.time.split(":") minutes = t[0].to_f64()*60 + t[1].to_f64() }
+            let item = {score: epoch_day(e.date)*1440 + minutes event: e}
+            if selected.len() < 3 { selected.push(item) } else { let latest = 0 for i in selected.len() { if selected[i].score > selected[latest].score { latest = i } } if item.score < selected[latest].score { selected[latest] = item } }
+        }
+    }
+    for i in selected.len() { for j in selected.len() { if i < j && selected[i].score > selected[j].score { let tmp = selected[i] selected[i] = selected[j] selected[j] = tmp } } }
+    let events = [] let sources = [] for item in selected { let e = item.event events.push({title: e.title date: e.date time: e.time}) sources.push(query_source_ref(e,"calendar",q.selection.subject_id)) }
+    return {capability: "calendar.next" count: count events: events sources: sources sources_truncated: count > sources.len() date_from: q.date_from date_to: q.date_to keyword: q.keyword}
+}
 fn calendar_write(c,a){
     if !valid_date(a.date) || a.title.trim() == "" || a.title.len() > 180 { return business_error("事件日期或事项无效。") }
     if a.status != "planned" && a.status != "occurred" && a.status != "cancelled" { return business_error("事件状态无效。") }
@@ -32,30 +47,13 @@ fn calendar_remove(c,id,revision){
     if removed == nil || removed.revision != revision { return business_error("事件不存在或已变化。") }
     c.calendar_events = kept tombstone_add(c,"calendar",id,revision + 1) return {"ok": true record_id: id}
 }
-fn protocol_envelope(r,module){
-    let status = "occurred" let amount = 0 let time = "" let precision = "day"
-    if module == "expense" { amount = r.cents } else { status = r.status time = r.time if time != "" { precision = "minute" } }
-    let occurred = r.date if time != "" { occurred += "T" + time + ":00+08:00" }
-    return {protocol_version: 1 change_id: module + "-" + r.id + "-" + r.revision operation: "upsert" source_app: "dailyflow" source_module: module source_record_id: r.id source_revision: r.revision date: r.date occurred_at: occurred time_precision: precision timezone: "Asia/Shanghai" summary: r.title status: status time: time amount_minor: amount currency: "CNY" flow_ids: r.flow_ids entry: {target: module record_id: r.id source_revision: r.revision action: "detail" actions: ["detail" "edit" "delete"]}}
-}
-fn source_snapshot(c){
-    let out = [] for r in expense_snapshot(c) { out.push(protocol_envelope(r,"expense")) } for e in calendar_snapshot(c) { out.push(protocol_envelope(e,"calendar")) }
-    for t in business_optional(c,"tombstones",[]) { out.push(t) } return out
-}
-fn projection_accept(items,event){
-    if event.protocol_version != 1 || event.source_app != "dailyflow" || (event.source_module != "expense" && event.source_module != "calendar") { return false }
-    for old in items { if old.source_module == event.source_module && old.source_record_id == event.source_record_id {
-        if old.source_revision >= event.source_revision { return false }
-        // Replace by index so omitted fields in a tombstone cannot leave stale amounts.
-    } }
-    let index = 0 for old in items { if old.source_module == event.source_module && old.source_record_id == event.source_record_id { items[index] = event return true } index += 1 }
-    items.push(event) return true
-}
+fn calendar_project(r){ return time_fields(r.date,"",r.time,r.status,false) }
 fn calendar_rebuild(){ calendar_projection = [] for event in source_snapshot(db) { projection_accept(calendar_projection,event) } }
 fn calendar_query(day,month,fid,mode){
     let out = []
     for e in calendar_projection { if e.operation == "upsert" {
-        let include = (day == "" || day == e.date) && (month == "" || month == month_of(e.date)) && member(e,fid)
+        let from = day let to = day if month != "" && day == "" { let parts = month.split("-") from = month + "-01" to = month + "-" + pad(month_days(parts[0].to_f64(),parts[1].to_f64())) }
+        let include = time_overlaps(e,from,to) && member(e,fid)
         if mode == "ledger" && e.source_module != "expense" { include = false }
         // An event with an attached expense is one ordinary-calendar item.
         if mode == "ordinary" && e.source_module == "expense" && flow_expense_on_day(e.source_record_id,fid,e.date) { include = false }

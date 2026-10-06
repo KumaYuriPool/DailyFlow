@@ -68,7 +68,7 @@
     },
     {
       "name": "dailyflow.save_record",
-      "description": "Compatibility source save. Only expense/event are supported; preserve stable request_id and current revision.",
+      "description": "Save/correct/delete supported source records. period_entry uses date/end_date; no predictions. Preserve request_id and revision.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -130,7 +130,8 @@
             "type": "string",
             "enum": [
               "expense",
-              "event"
+              "event",
+              "period_entry"
             ]
           },
           "operation": {
@@ -160,7 +161,8 @@
             }
           },
           "end_date": {
-            "type": "string"
+            "type": "string",
+            "description": "Recorded inclusive end date for period_entry, empty when not recorded."
           },
           "source": {
             "type": "string"
@@ -174,14 +176,15 @@
       "output_schema": {
         "type": "object"
       },
-      "risk": "act",
+      "risk": "destructive",
       "shareable": true,
       "private_data": true,
-      "implemented_by": "app"
+      "implemented_by": "app",
+      "confirm": "host"
     },
     {
       "name": "dailyflow.apply",
-      "description": "Atomic expense, event fact, and explicit followup plan; typed relations. Never invent facts; clarify ambiguous identity/amount. Mutations require user intent, stable request_id; updates need current source revision. Delete Flow retains sources.",
+      "description": "Save/correct/delete supported source records. period_entry uses date/end_date; no predictions. Preserve request_id and revision.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -243,7 +246,8 @@
             "type": "string",
             "enum": [
               "expense",
-              "event"
+              "event",
+              "period_entry"
             ]
           },
           "operation": {
@@ -271,6 +275,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "end_date": {
+            "type": "string",
+            "description": "Recorded inclusive end date for period_entry, empty when not recorded."
           }
         },
         "required": [
@@ -281,8 +289,178 @@
       "output_schema": {
         "type": "object"
       },
-      "risk": "act",
+      "risk": "destructive",
       "shareable": true,
+      "private_data": true,
+      "implemented_by": "app",
+      "confirm": "host"
+    },
+    {
+      "name": "dailyflow.capabilities",
+      "description": "List the current in-process DailyFlow module capabilities and visible shared subjects.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": true,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.module_query",
+      "description": "Read full source totals or upcoming plans through selected in-process modules; returns bounded source references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "flow_id": {
+            "type": "string"
+          },
+          "queries": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "capability"
+              ],
+              "properties": {
+                "capability": {
+                  "type": "string",
+                  "enum": [
+                    "expense.summary",
+                    "calendar.next",
+                    "period.history"
+                  ]
+                },
+                "period": {
+                  "type": "string",
+                  "enum": [
+                    "all",
+                    "today",
+                    "this_month",
+                    "last_month"
+                  ]
+                },
+                "date_from": {
+                  "type": "string"
+                },
+                "date_to": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "keyword": {
+                  "type": "string",
+                  "maxLength": 180
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": true,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.timeline_query",
+      "description": "Read registered dated sources across modules; inclusive civil-date overlap, snapshot-checked pagination. Includes period records when selected or querying all sources.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date_from": {
+            "type": "string"
+          },
+          "date_to": {
+            "type": "string"
+          },
+          "source_module": {
+            "type": "string"
+          },
+          "flow_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "snapshot_revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": false,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.recall",
+      "description": "Read-only on-demand timeline by literal record title or an existing subject name. Expand only confirmed typed relations. Does not create a Flow or infer causality.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "flow_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "snapshot_revision": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": false,
       "private_data": true,
       "implemented_by": "app"
     }

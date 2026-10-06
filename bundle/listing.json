@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "subtitle": "日历、账本与有语义的事件 Flow",
-  "description": "DailyFlow 单 App 本地验证版。普通/账本日历切换，事件事实、费用归属与明确后续计划组成事件图。统一输入自动组织明确事项、关联费用、追问歧义、更正同一源账并查询实际合计。历史个人数据保留，支持本地备份恢复。应用内模型依赖已有桌面 Provider；Shell Agent 跨 App 工具路径未验收。本版本未发布。",
+  "subtitle": "随手记下来，想起时再找",
+  "description": "DailyFlow 帮你记录日常支出、发生的事与明确的后续安排，用日历按天浏览，或按名字和关键词查找相关记录，沿已确认关系回看时间线。费用、事项和经期记录保留各自来源；查看后可更正原记录，金额由程序统计。提供普通/账本日历、手工经期起止记录、本地备份恢复和内置帮助。当前为 Windows 早期试用版，仍是一个 App 内的多个模块。对话记录、更正和支持的统计查询需要 OctoSense 可用的 model 服务与已配置的模型提供商；无模型时可用手工入口。对话尚不能直接发起完整时间线查找，独立 App 接入、后台提醒和云同步未提供。自动记录有128条收据、命名分组有80个的容量边界，连续长期使用尚未验收。",
   "category": "productivity",
   "keywords": [
     "calendar",
@@ -12,18 +12,18 @@
   "screenshots": [
     "screenshots/01-calendar.png",
     "screenshots/02-ledger.png",
-    "screenshots/03-event-flow.png"
+    "screenshots/03-recall.png"
   ],
   "icon": "assets/icon.svg",
   "platforms": [
     "windows"
   ],
   "publisher": {
-    "name": "Replace with your publisher name",
-    "support": "https://example.com/support",
-    "privacy_policy_url": "https://example.com/privacy"
+    "name": "毛茸茸战队",
+    "support": "https://github.com/KumaYuriPool/DailyFlow/issues",
+    "privacy_policy_url": "https://github.com/KumaYuriPool/DailyFlow/blob/v0.6.4/PRIVACY.md"
   },
-  "release_notes": "0.4.0: one app with expense/calendar protocol boundaries, semantic event facts/expenses/plans, typed relations, automatic association/correction/query, protected migration and isolated Windows acceptance. Local only; no publication.",
+  "release_notes": "0.6.4 早期试用：对话与按需工作区；关键词回顾时间线；三个内部模块共用时间协议；同日事项及关联费用在普通日历合并展示；新增产品定位、核心概念和使用说明，帮助独占右侧工作区。仅 Windows 本地验证，已知限制见应用说明与项目文档。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

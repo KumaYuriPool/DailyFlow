@@ -1,0 +1,34 @@
+// Repair only the known pre-0.6.2 ungrouped compound-write omission.
+// Receipt payload + exact adjacent allocated IDs + untouched original fields/times,
+// never title/date similarity alone. Existing/conflicting edges are left untouched.
+fn recover_compound_relations(c){
+    if business_optional(c,"source_relations_version",0) >= 1 { return 0 }
+    let expenses = expense_snapshot(c) let events = calendar_snapshot(c) let count = 0
+    for receipt in business_optional(c,"receipts",[]) {
+        try {
+            let a = receipt.payload.parse_json()
+            if a.operation == "save" && a.kind == "expense" && a.record_id == "" && a.expected_revision == 0 && a.event_title != "" && a.subject == "" && a.flow_id == "" && a.flow_names.len() == 0 && a.related_event_id == "" && a.plan_title == "" {
+                let expense = nil for r in expenses { if r.id == receipt.record_id { expense = r } }
+                if expense != nil && expense.revision == 1 && expense.flow_ids.len() == 0 && expense.title == a.title.trim() && expense.date == a.date && expense.cents == amount_cents(a.amount) && regex("^r[0-9]+$", "").test(expense.id) {
+                    let number = expense.id.split("r")[1].to_f64() let expected = "evt" + (number + 1)
+                    let event = nil for e in events { if e.id == expected { event = e } }
+                    if event != nil && event.revision == 1 && event.flow_ids.len() == 0 && event.status == "occurred" && event.title == a.event_title.trim() && event.date == a.date && event.time == a.time && event.created_at >= expense.created_at && event.created_at - expense.created_at < 1 {
+                        let related = false for rel in flow_relations(c) { if rel.from_node == expense.id || rel.to_node == expense.id || rel.from_node == event.id || rel.to_node == event.id { related = true } }
+                        if !related { relation_add(c,"","expense_for",event.id,expense.id,"recovered-compound-receipt:" + receipt.request_id) count += 1 }
+                    }
+                }
+            }
+        } catch { /* Older or incomplete receipts are not recovery evidence. */ }
+    }
+    return count
+}
+fn repair_source_relations(){
+    if locked || business_optional(db,"source_relations_version",0) >= 1 { return }
+    let candidate = clone_db() let count = recover_compound_relations(candidate)
+    if count == 0 { return }
+    let backup = "pre-source-relations-v1-" + db.revision + ".json"
+    if fs.exists(backup) { let old = read_json(backup) if old == nil || old.to_json() != db.to_json() { message = "关联修复备份不完整，原记录保持不变。" return } }
+    else { if !write_checked(backup,db.to_json()) { message = "关联修复备份失败，原记录保持不变。" return } }
+    candidate.source_relations_version = 1
+    if !persist(candidate) { message = "关联修复未保存，原记录保持不变。" }
+}

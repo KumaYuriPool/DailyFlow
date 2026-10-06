@@ -1,6 +1,21 @@
 // Keep the columns mounted: hiding a workspace must not discard its route or draft.
+fn chat_actions(){
+    let out = [] if busy { return out }
+    for source in chat_query_sources { out.push({kind: "source" id: source.source_record_id label: "来源 · " + source.title}) }
+    if last_saved != "" && chat_state == "saved" && source_get(last_saved) != nil {
+        out.push({kind: "source" id: last_saved label: "查看源记录"})
+    }
+    if active_flow != "" { out.push({kind: "flow" id: active_flow label: "回看相关记录"}) }
+    return out
+}
+fn chat_visible_actions(){ if chat_actions_open { return chat_actions() } return [] }
+fn chat_action(a){
+    if a.kind == "source" { view_open(a.id) }
+    if a.kind == "flow" { recall_open_flow(a.id) }
+}
+fn toggle_chat_actions(){ chat_actions_open = !chat_actions_open ui.home_page.render() }
+fn record_tags_text(r){ let text = "" for tag in business_optional(r,"user_tags",[]) { if text != "" { text += "  " } text += "#" + tag } return text }
 fn render_layout(){
-    ui.flow_rail.set_visible(layout_wide)
     ui.chat_column.set_visible(!workspace_open || (layout_wide && !workspace_expanded))
     ui.workspace_column.set_visible(workspace_open)
     ui.workspace_header.render()
@@ -23,27 +38,52 @@ fn expand_workspace(){ workspace_expanded = !workspace_expanded render_layout() 
 fn focus_conversation(){ workspace_expanded = false if !layout_wide { workspace_open = false } render_layout() ui.navigation.render() }
 fn render_screen(){
     render_layout()
+    // Keep help in its own full-height slot: rendering a previous source page
+    // must never leave it sharing vertical space with the guide.
+    ui.app_pages.set_visible(screen != "help")
     ui.picker_page.set_visible(screen == "picker")
     ui.calendar_page.set_visible(screen == "calendar")
     ui.ledger_page.set_visible(screen == "ledger")
+    ui.period_page.set_visible(screen == "period")
+    ui.recall_page.set_visible(screen == "recall")
     ui.graph_page.set_visible(screen == "graph")
     ui.detail_page.set_visible(screen == "detail")
     ui.edit_page.set_visible(screen == "edit")
     ui.settings_page.set_visible(screen == "settings")
+    ui.help_page.set_visible(screen == "help")
     ui.home_page.render()
-    ui.flow_list.render()
+    if screen == "recall" { recall_refresh() }
     if screen == "picker" { ui.picker_results.render() }
     if screen == "calendar" { ui.calendar_page.render() }
     if screen == "ledger" { ui.ledger_page.render() }
+    if screen == "period" { ui.period_page.render() }
     if screen == "graph" { ui.graph_page.render() }
     if screen == "detail" { ui.detail_page.render() }
     if screen == "edit" { ui.edit_page.render() }
     if screen == "settings" { ui.settings_page.render() }
+    if screen == "help" { ui.help_content.render() }
 }
 let picker_return = "home"
 let picker_was_open = false
 fn picker(kind){ if screen != "picker" { picker_return = screen picker_was_open = workspace_open } dropdown_open = kind dropdown_query = "" ui.picker_search.set_text("") go("picker") }
 fn picker_close(){ screen = picker_return workspace_open = picker_was_open dropdown_open = "" redraw() }
+let recall_text = ""
+let recall_flow = ""
+let recall_offset = 0
+let recall_revision = -1
+let recall_result = nil
+let recall_explain = false
+let membership_open = false
+fn recall_refresh(){
+    recall_result = recall_query({text: recall_text flow_id: recall_flow offset: recall_offset snapshot_revision: recall_revision})
+    if !recall_result["ok"] && recall_offset > 0 { recall_offset = 0 recall_result = recall_query({text: recall_text flow_id: recall_flow}) }
+    if recall_result["ok"] { recall_revision = recall_result.snapshot_revision }
+    ui.recall_results.render()
+}
+fn recall_search(){ recall_flow = "" recall_offset = 0 recall_explain = false recall_refresh() }
+fn recall_open_flow(fid){ push_route() recall_flow = fid recall_text = flow_name(fid) recall_offset = 0 ui.recall_input.set_text(recall_text) go("recall") }
+fn recall_date(e){ let text = e.date if e.end_date != "" { text += " 至 " + e.end_date } if e.open_end { text += " · 结束待补" } if e.time != "" { text += " " + e.time } return text }
+fn recall_source(e){ let adapter = time_adapter(e.source_module) if adapter == nil { return e.source_module } return adapter.name }
 fn matches(text){ return dropdown_query == "" || text.search(dropdown_query) >= 0 }
 fn workspace(s){ if s == "home" { close_workspace() return } dropdown_open = "" route_stack = [] go(s) }
 fn choose_flow(fid){
@@ -60,7 +100,9 @@ fn backfill_here(){
 }
 fn input_scope(){ if active_flow == "" { return "全部事件" } return flow_name(active_flow) }
 fn workspace_title(){
-    if screen == "calendar" { return "日历" } if screen == "ledger" { return "账本" }
+    if screen == "help" { return "使用说明" }
+    if screen == "recall" { return "找记录" }
+    if screen == "period" { return "经期记录" } if screen == "calendar" { return "日历" } if screen == "ledger" { return "账本" }
     if screen == "graph" { return "事件关系" } if screen == "home" { return input_scope() }
     if screen == "detail" { return "源记录" } if screen == "edit" { return "编辑记录" }
     if screen == "settings" { return "本地数据" } if screen == "picker" { return "选择" }
@@ -79,12 +121,12 @@ fn view_back(){
     let kept = [] let r = route_stack[route_stack.len()-1] for i in route_stack.len() { if i < route_stack.len()-1 { kept.push(route_stack[i]) } } route_stack = kept
     screen = r.screen workspace_open = screen != "home" active_flow = r.flow scope_current = r.filter_current yy = r.year mm = r.month selected = r.selected page_offset = r.offset detail_id = r.record delete_armed = false redraw()
 }
-fn view_open(id){ push_route() detail_id = id go("detail") }
+fn view_open(id){ push_route() detail_id = id membership_open = false go("detail") }
 fn graph_open(fid){ push_route() active_flow = fid scope_current = true go("graph") }
-fn view_new(kind){ push_route() edit_id = "" edit_revision = 0 draft_kind = kind draft_title = "" draft_category = "" draft_date = context_date draft_value = "" draft_time = "" draft_status = "occurred" if kind == "event" { draft_status = "planned" } go("edit") }
+fn view_new(kind){ push_route() edit_id = "" edit_revision = 0 draft_kind = kind draft_title = "" draft_end = "" draft_category = "" draft_date = context_date draft_value = "" draft_time = "" draft_status = "occurred" if kind == "event" { draft_status = "planned" } go("edit") }
 fn view_edit(){
     let r = source_get(detail_id) if r == nil { return } push_route()
-    edit_id = r.id edit_revision = r.revision draft_kind = r.kind draft_title = r.title draft_date = r.date draft_value = "" draft_time = "" draft_status = "occurred"
+    edit_id = r.id edit_revision = r.revision draft_kind = r.kind draft_title = r.title draft_date = r.date draft_end = business_optional(r,"end_date","") draft_value = "" draft_time = "" draft_status = "occurred"
     if r.kind == "expense" { draft_value = money(r.cents) draft_category = business_optional(r,"category","") } else { draft_time = r.time draft_status = r.status }
     go("edit")
 }
@@ -92,7 +134,8 @@ fn manual_apply(a){ a.request_id = "manual-" + db.revision + "-" + db.seq let re
 fn save_record(){
     let fid = "" if scope_current || screen == "graph" { fid = active_flow }
     let tags = [] if edit_id != "" { tags = business_optional(source_get(edit_id),"user_tags",[]) }
-    let result = manual_apply({category: draft_category user_tags: tags operation: "save" record_id: edit_id expected_revision: edit_revision kind: draft_kind title: draft_title date: draft_date amount: draft_value time: draft_time status: draft_status flow_id: fid})
+    if draft_kind == "period_entry" { fid = "" draft_title = "经期" }
+    let result = manual_apply({end_date: draft_end category: draft_category user_tags: tags operation: "save" record_id: edit_id expected_revision: edit_revision kind: draft_kind title: draft_title date: draft_date amount: draft_value time: draft_time status: draft_status flow_id: fid})
     if result["ok"] { detail_id = result.record_id edit_id = result.record_id edit_revision = source_get(edit_id).revision view_back() } else { redraw() }
 }
 fn delete_record(){
@@ -119,75 +162,52 @@ fn calendar_cell_label(n){
     return "" + n
 }
 fn projection_label(e){ let text = e.summary if e.source_module == "expense" { return text + "  ¥" + money(e.amount_minor) } return state_label(e.status) + " · " + text }
+fn calendar_item_label(e){
+    let label = projection_label(e)
+    if calendar_mode == "ordinary" && e.source_module == "calendar" && e.status == "occurred" {
+        let amount = 0 for cost in event_expenses(e.source_record_id,scope_id(),e.date) { amount += cost.amount_minor }
+        if amount > 0 { label += " · ¥" + money(amount) }
+    } return label
+}
 fn context_text(){ let prefix = "补记 · " if context_date == today() { prefix = "今天 · " } return prefix + context_date + " · " + input_scope() }
 start_timeout(0.08,|| boot())
 SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xffffff
     SolidView{width: 52 height: Fill flow: Down padding: 4 spacing: 10 draw_bg.color: #xf4f5f1
         Label{width: Fill text: "DF" draw_text.color: accent draw_text.text_style.font_size: 18}
         ButtonFlat{width: Fill height: 44 text: "对话" on_click: || workspace("home")}
+        ButtonFlat{width: Fill height: 44 text: "查找" on_click: || workspace("recall")}
         ButtonFlat{width: Fill height: 44 text: "日历" on_click: || workspace("calendar")}
         ButtonFlat{width: Fill height: 44 text: "账本" on_click: || workspace("ledger")}
         ButtonFlat{width: Fill height: 44 text: "全部" on_click: || picker("apps")}
         View{width: Fill height: Fill}
+        help_entry := ButtonFlat{width: Fill height: 40 text: "帮助" on_click: || open_help()}
         ButtonFlat{width: Fill height: 40 text: "数据" on_click: || { push_route() go("settings") }}
-    }
-    flow_rail := SolidView{width: 168 height: Fill flow: Down padding: 8 spacing: 6 visible: false draw_bg.color: #xf4f5f1
-        Label{width: Fill text: "Flow" draw_text.color: ink draw_text.text_style.font_size: 12 draw_text.text_style.font_weight: 600}
-        ButtonFlat{width: Fill height: 28 text: "全部事件" on_click: || choose_flow("")}
-        flow_list := ScrollYView{width: Fill height: Fill flow: Down spacing: 4 on_render: || {
-            for f in flow_catalog(db) {
-                let row_bg = if scope_current && active_flow == f.id { #xeaf3f1 } else { #xffffff }
-                SolidView{width: Fill height: Fit flow: Down padding: 6 spacing: 2 draw_bg.color: row_bg
-                    ButtonFlat{width: Fill height: 32 text: f.name draw_text.color: ink draw_text.text_style.font_size: 11 on_click: || { choose_flow(f.id) }}
-                    let summary = flow_query(f.id)
-                    Label{width: Fill text: "支出 ¥" + money(summary.amount_minor) draw_text.color: muted draw_text.text_style.font_size: 9}
-                    Label{width: Fill text: "" + summary.plans + " 项计划" draw_text.color: muted draw_text.text_style.font_size: 9}
-                }
-            }
-            if flow_catalog(db).len() == 0 { Label{text: "暂无 Flow" draw_text.color: muted draw_text.text_style.font_size: 10} }
-        }}
-        Label{width: Fill text: "持续发生的事，在这里接着说。" draw_text.color: muted draw_text.text_style.font_size: 9}
     }
     View{width: Fill height: Fill flow: Down padding: 12 spacing: 8
     navigation := View{width: Fill height: Fit flow: Down spacing: 6 on_render: || {
         View{width: Fill height: 34 flow: Right spacing: 5
-            ButtonFlat{width: Fill height: 34 text: "Flow · " + input_scope() + " ▾" on_click: || picker("flows")}
-            ButtonFlat{width: 96 height: 34 text: "+ 说件新事" on_click: || new_conversation()}
-        }
-        View{width: Fill height: 30 flow: Right spacing: 5
-            let layout_label = "并排查看" if layout_wide { layout_label = "单列查看" }
-            ButtonFlat{width: 84 height: 30 text: layout_label on_click: || toggle_layout()}
-            if !workspace_open { ButtonFlat{width: Fill height: 30 text: "打开工作区" on_click: || resume_workspace()} }
-            else { Label{width: Fill text: "对话与工作区" draw_text.color: muted draw_text.text_style.font_size: 10} }
+            let layout_label = "并排" if layout_wide { layout_label = "单列" }
+            layout_toggle := ButtonFlat{width: 44 height: 34 text: layout_label on_click: || toggle_layout()}
+            ButtonFlat{width: Fill height: 34 text: "范围 · " + input_scope() + " ▾" on_click: || picker("flows")}
+            ButtonFlat{width: 88 height: 34 text: "+ 说件新事" on_click: || new_conversation()}
+            let workspace_label = "工作区" if workspace_open { workspace_label = "收起" }
+            workspace_toggle := ButtonFlat{width: 60 height: 34 text: workspace_label on_click: || { if workspace_open { close_workspace() } else { resume_workspace() } }}
         }
     }}
     status := Label{width: Fill text: "读取中" draw_text.color: muted draw_text.text_style.font_size: 10}
     page := View{width: Fill height: Fill flow: Right spacing: 12
         chat_column := View{width: Fill height: Fill flow: Down spacing: 10
         home_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 14 on_render: || {
-            Label{width: Fill text: "今天发生了什么？" draw_text.color: ink draw_text.text_style.font_size: 26}
-            Label{width: Fill text: "记下一件事，让费用与后续安排自然连起来。" draw_text.color: muted draw_text.text_style.font_size: 11}
-            ButtonFlat{width: Fill height: 38 text: "试试：今天给团子洗护花了120元" on_click: || { chat_edit("今天给团子洗护花了120元") redraw() }}
-            for turn in chat_turns {
+            if chat_turns.len() == 0 {
+                Label{width: Fill text: "今天发生了什么？" draw_text.color: ink draw_text.text_style.font_size: 26}
+                Label{width: Fill text: "随手记下来，想起时再找。" draw_text.color: muted draw_text.text_style.font_size: 11}
+            }
+            for turn in chat_display_turns() {
                 Label{width: Fill text: turn.text draw_text.color: ink draw_text.text_style.font_size: 13}
             }
-            Label{width: Fill text: chat_result draw_text.color: accent draw_text.text_style.font_size: 12}
-            if last_saved != "" {
-                let receipt = source_get(last_saved)
-                if receipt != nil {
-                    Label{width: Fill text: "已保存 · " + receipt.title + " · " + receipt.date draw_text.color: ink}
-                    if receipt.kind == "expense" { Label{text: "¥" + money(receipt.cents) draw_text.color: accent draw_text.text_style.font_size: 22} }
-                    View{width: Fill height: 38 flow: Right spacing: 5
-                        ButtonFlat{width: Fill text: "查看源记录" on_click: || view_open(last_saved)}
-                        ButtonFlat{width: Fill text: "在日历查看" on_click: || { jump_date = receipt.date jump() workspace("calendar") }}
-                    }
-                }
-            }
-            if active_flow != "" {
-                let current = flow_query(active_flow)
-                Label{width: Fill text: current.name + " · 支出 ¥" + money(current.amount_minor) + " · " + current.plans + " 项计划" draw_text.color: ink}
-                ButtonFlat{width: Fill height: 38 text: "查看事件关系" on_click: || graph_open(active_flow)}
-            }
+            Label{width: Fill text: chat_result draw_text.color: ink draw_text.text_style.font_size: 12}
+            if chat_actions().len() > 0 { let label = "相关操作 ▾" if chat_actions_open { label = "相关操作 ▴" } ButtonFlat{width: 104 height: 30 text: label on_click: || toggle_chat_actions()} }
+            for action in chat_visible_actions() { ButtonFlat{width: Fill height: 32 text: action.label on_click: || chat_action(action)} }
             if chat_state == "save_error" { ButtonFlat{width: Fill text: "重试保存" on_click: || chat_retry_save()} }
         }}
     composer := View{width: Fill height: Fit flow: Down spacing: 5 on_render: || {
@@ -212,6 +232,7 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
                 }
                 if !layout_wide || workspace_expanded { Label{width: Fill text: context_text() draw_text.color: muted draw_text.text_style.font_size: 10} }
             }}
+        app_pages := View{width: Fill height: Fill flow: Down
         picker_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 10
             ButtonFlat{text: "‹ 关闭选择" on_click: || picker_close()}
             picker_search := TextInput{width: Fill height: 40 text: dropdown_query empty_text: "搜索应用、视图或事件…" on_change: |v| { dropdown_query = v ui.picker_results.render() }}
@@ -220,7 +241,9 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
                 if dropdown_open == "apps" {
                     Label{text: "可用应用入口" draw_text.color: ink}
                     if matches("日历 calendar") { count += 1 ButtonFlat{width: Fill height: 44 text: "日历" on_click: || workspace("calendar")} }
+                    if matches("经期记录 period") { count += 1 ButtonFlat{width: Fill height: 44 text: "经期记录" on_click: || workspace("period")} }
                     if matches("账本 记账 ledger") { count += 1 ButtonFlat{width: Fill height: 44 text: "账本" on_click: || workspace("ledger")} }
+                    if matches("使用说明 帮助 help") { count += 1 ButtonFlat{width: Fill height: 44 text: "使用说明" on_click: || open_help()} }
                 }
                 if dropdown_open == "views" {
                     Label{text: "日历视图与来源" draw_text.color: ink}
@@ -228,11 +251,46 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
                     if matches("账本日历 来源：记账") { count += 1 ButtonFlat{width: Fill height: 44 text: "账本日历 · 来源：记账" on_click: || { calendar_mode = "ledger" picker_close() }} }
                 }
                 if dropdown_open == "flows" {
-                    Label{text: "事件 Flow" draw_text.color: ink}
+                    Label{text: "这次聊什么" draw_text.color: ink}
                     if matches("全部事件") { count += 1 ButtonFlat{width: Fill height: 40 text: "全部事件" on_click: || choose_flow("")} }
-                    for f in flow_catalog(db) { if matches(f.name) { count += 1 ButtonFlat{width: Fill height: 44 text: f.name on_click: || choose_flow(f.id)} } }
+                    if dropdown_query == "" { count += 1 Label{width: Fill text: "输入名字，查找已有范围。" draw_text.color: muted} }
+                    else { for f in flow_catalog(db) { if matches(f.name) && count < 11 { count += 1 ButtonFlat{width: Fill height: 44 text: f.name on_click: || choose_flow(f.id)} } } }
                 }
                 if count == 0 { Label{width: Fill text: "没有匹配结果" draw_text.color: muted} }
+            }}
+        }
+        recall_page := View{width: Fill height: Fill flow: Down spacing: 8 visible: false
+            Label{width: Fill text: "想找哪件事？" draw_text.color: ink draw_text.text_style.font_size: 22}
+            View{width: Fill height: 40 flow: Right spacing: 6
+                recall_input := TextInput{width: Fill height: 40 text: recall_text empty_text: "名字或记录名称…" on_change: |v| { recall_text = v } on_return: |v| recall_search()}
+                ButtonFlat{width: 58 height: 40 text: "搜索" on_click: || recall_search()}
+            }
+            recall_results := ScrollYView{width: Fill height: Fill flow: Down spacing: 8 on_render: || {
+                if recall_result != nil {
+                    if !recall_result["ok"] { Label{width: Fill text: recall_result.message draw_text.color: muted} }
+                    else {
+                        if recall_result.text == "" && recall_flow == "" { Label{width: Fill text: "输入名字或关键词，回看相关记录。" draw_text.color: muted} }
+                        else {
+                            if recall_result.flow_id == "" {
+                                for candidate in recall_result.candidates { ButtonFlat{width: Fill height: 36 text: "回看 " + candidate.label on_click: || { recall_flow = candidate.id recall_offset = 0 recall_refresh() }} }
+                                if recall_result.candidate_total > 10 { Label{width: Fill text: "匹配的名字较多，请再写具体一些。" draw_text.color: muted} }
+                            }
+                            Label{width: Fill text: "找到 " + recall_result.total + " 条 · 按时间排列" draw_text.color: ink}
+                            if recall_result.total == 0 { Label{width: Fill text: "没有找到，试试记录里的名字或关键词。" draw_text.color: muted} }
+                            if recall_result.total > 0 { ButtonFlat{width: 140 height: 28 text: "为什么找到这些 ▾" on_click: || { recall_explain = !recall_explain ui.recall_results.render() }} }
+                            for e in recall_result.events {
+                                Label{width: Fill text: "│  " + recall_date(e) draw_text.color: muted draw_text.text_style.font_size: 11}
+                                ButtonFlat{width: Fill height: 40 text: projection_label(e) on_click: || view_open(e.source_record_id)}
+                                let hint = recall_source(e) if recall_explain { hint += " · " + e.match_reason }
+                                Label{width: Fill text: hint draw_text.color: muted draw_text.text_style.font_size: 10}
+                            }
+                            if recall_offset > 0 || recall_result.has_more { View{width: Fill height: 36 flow: Right spacing: 6
+                                if recall_offset > 0 { ButtonFlat{width: Fill text: "上一页" on_click: || { recall_offset -= 20 recall_refresh() }} }
+                                if recall_result.has_more { ButtonFlat{width: Fill text: "下一页" on_click: || { recall_offset = recall_result.next_offset recall_refresh() }} }
+                            } }
+                        }
+                    }
+                }
             }}
         }
         calendar_page := ScrollYView{width: Fill height: Fill flow: Down padding: Inset{right: 12} spacing: 7 visible: true on_render: || {
@@ -277,9 +335,16 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
             ButtonFlat{width: Fill height: 36 text: "以这一天补记" on_click: || backfill_here()}
             let items = calendar_query(selected,"",scope_id(),calendar_mode)
             if items.len() == 0 { Label{text: "这一天还没有记录" draw_text.color: muted} }
-            for e in items { ButtonFlat{width: Fill height: 40 text: projection_label(e) on_click: || { if calendar_mode == "ordinary" && e.flow_ids.len() > 0 { graph_open(e.flow_ids[0]) } else { view_open(e.source_record_id) } }} }
+            for e in items { ButtonFlat{width: Fill height: 40 text: calendar_item_label(e) on_click: || view_open(e.source_record_id)} }
             }
             }
+        }}
+        period_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 8 visible: true on_render: || {
+            Label{width: Fill text: "经期记录" draw_text.color: ink draw_text.text_style.font_size: 22}
+            ButtonFlat{width: Fill height: 42 text: "+ 记一次经期" on_click: || view_new("period_entry")}
+            let rows = period_snapshot(db)
+            if rows.len() == 0 { Label{width: Fill text: "记下开始和结束的日期，方便以后回看。" draw_text.color: muted} }
+            for r in rows { let end = r.end_date if end == "" { end = "还未记结束日期" } ButtonFlat{width: Fill height: 44 text: r.date + " 至 " + end on_click: || view_open(r.id)} }
         }}
         ledger_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 7 visible: true on_render: || {
             Label{text: "支出账本" draw_text.color: ink draw_text.text_style.font_size: 22}
@@ -329,23 +394,36 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
                 Label{width: Fill text: r.date draw_text.color: muted}
                 if r.kind == "expense" { Label{text: "¥" + money(r.cents) draw_text.color: accent draw_text.text_style.font_size: 26}
                     Label{width: Fill text: business_optional(r,"category","") draw_text.color: muted}
+                    Label{width: Fill text: record_tags_text(r) draw_text.color: accent}
                 }
-                else { Label{text: state_label(r.status) + " · " + r.time draw_text.color: accent} }
+                else { if r.kind == "period_entry" { let end = r.end_date if end == "" { end = "还未记结束日期" } Label{width: Fill text: "结束：" + end draw_text.color: muted} } else { Label{text: state_label(r.status) + " · " + r.time draw_text.color: accent} } }
                 ButtonFlat{width: Fill height: 42 text: "修改" on_click: || view_edit()}
+                if r.kind == "event" { for cost in event_expenses(r.id,"","") { ButtonFlat{width: Fill height: 40 text: "费用 · " + cost.summary + " ¥" + money(cost.amount_minor) on_click: || view_open(cost.source_record_id)} } }
+                if r.kind == "expense" { for rel in flow_relations(db) { if rel.type == "expense_for" && rel.to_node == r.id { let fact = source_get(rel.from_node) if fact != nil { ButtonFlat{width: Fill height: 40 text: "相关事项 · " + fact.title on_click: || view_open(fact.id)} } } } }
                 ButtonFlat{width: Fill text: "定位到日历" on_click: || { jump_date = r.date jump() go("calendar") }}
-                for f in flow_catalog(db) { if member(r,f.id) { ButtonFlat{width: Fill text: "打开事件 · " + f.name on_click: || graph_open(f.id)} } }
-                Label{text: "更正归属" draw_text.color: muted}
-                for f in flow_catalog(db) { let action = "加入 " if member(r,f.id) { action = "移出 " } ButtonFlat{width: Fill text: action + f.name on_click: || toggle_member(f.id)} }
+                for f in flow_catalog(db) { if member(r,f.id) { ButtonFlat{width: Fill text: "回看「" + f.name + "」" on_click: || recall_open_flow(f.id)} } }
+                if r.kind != "period_entry" {
+                    ButtonFlat{text: "调整关联 ▾" on_click: || { membership_open = !membership_open ui.detail_page.render() }}
+                    if membership_open {
+                    for f in flow_catalog(db) { let action = "加入 " if member(r,f.id) { action = "移出 " } ButtonFlat{width: Fill text: action + f.name on_click: || toggle_member(f.id)} }
+                    for f in flow_catalog(db) { if member(r,f.id) { ButtonFlat{width: Fill text: "管理关联 · " + f.name on_click: || graph_open(f.id)} } }
+                    }
+                }
                 ButtonFlat{text: "删除源记录" on_click: || delete_record()}
             } else { Label{text: "记录已删除" draw_text.color: muted} }
         }}
         edit_page := ScrollYView{width: Fill height: Fill flow: Down spacing: 7 visible: true on_render: || {
             ButtonFlat{text: "‹ 返回" on_click: || view_back()}
             Label{text: "修改 / 记录" draw_text.color: ink draw_text.text_style.font_size: 20}
-            record_title := TextInput{width: Fill height: 42 text: draft_title empty_text: "事项" on_change: |v| { draft_title = v }}
+            if draft_kind == "period_entry" { Label{width: Fill text: "开始日期" draw_text.color: ink} }
+            else { record_title := TextInput{width: Fill height: 42 text: draft_title empty_text: "事项" on_change: |v| { draft_title = v }} }
             record_date := TextInput{width: Fill height: 42 text: draft_date empty_text: "YYYY-MM-DD" on_change: |v| { draft_date = v }}
             if draft_kind == "expense" { record_amount := TextInput{width: Fill height: 42 text: draft_value empty_text: "金额（元）" on_change: |v| { draft_value = v }}
                 record_category := TextInput{width: Fill height: 42 text: draft_category empty_text: "分类（可选）" on_change: |v| { draft_category = v }}
+            }
+            if draft_kind == "period_entry" {
+                Label{width: Fill text: "上方为开始日期；尚未结束可留空下方。" draw_text.color: muted}
+                record_end := TextInput{width: Fill height: 42 text: draft_end empty_text: "结束日期 YYYY-MM-DD，可空" on_change: |v| { draft_end = v }}
             }
             if draft_kind == "event" {
                 record_time := TextInput{width: Fill height: 42 text: draft_time empty_text: "时间 HH:MM，可空" on_change: |v| { draft_time = v }}
@@ -366,6 +444,22 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
             ButtonFlat{width: Fill text: "导入旧账本" on_click: || expense_import()}
             Label{width: Fill text: "备份保留全部历史个人数据。恢复前会另存副本。" draw_text.color: muted}
         }}
+        }
+        help_page := View{width: Fill height: Fill flow: Down spacing: 10 visible: false
+            ButtonFlat{width: Fill height: 34 text: "‹ 返回刚才的页面" on_click: || help_back()}
+            help_content := ScrollYView{width: Fill height: Fill flow: Down spacing: 18 on_render: || {
+                if help_topic < 0 {
+                    Label{width: Fill text: "慢慢来，先记一件事。" draw_text.color: ink draw_text.text_style.font_size: 20}
+                    Label{width: Fill text: "用到哪里，就看哪一节。说明离线可读，例句不会自动保存。" draw_text.color: muted draw_text.text_style.font_size: 12}
+                    for index in help_sections.len() { ButtonFlat{width: Fill height: 42 text: help_sections[index].title on_click: || help_select(index)} }
+                } else {
+                    ButtonFlat{width: Fill height: 34 text: "‹ 说明目录" on_click: || help_select(-1)}
+                    let section = help_sections[help_topic]
+                    Label{width: Fill text: section.title draw_text.color: ink draw_text.text_style.font_size: 20}
+                    for paragraph in section.paragraphs { Label{width: Fill text: paragraph draw_text.color: ink draw_text.text_style.font_size: 12} }
+                }
+            }}
+        }
         }
     }
     }

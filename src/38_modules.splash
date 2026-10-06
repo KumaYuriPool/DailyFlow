@@ -1,0 +1,11 @@
+// Composition root: new pseudo Apps register adapters here, not in calendar/Flow core.
+fn time_modules(){ return [
+    {id: "expense" kind: "expense" name: "记账" snapshot: expense_snapshot project: expense_project write: expense_write remove: expense_remove membership: expense_membership}
+    {id: "calendar" kind: "event" name: "日历" snapshot: calendar_snapshot project: calendar_project write: calendar_write remove: calendar_remove membership: calendar_membership}
+    {id: "period" kind: "period_entry" name: "经期记录" snapshot: period_snapshot project: period_project write: period_write remove: period_remove membership: period_membership}
+] }
+fn query_capabilities(){ return [
+    {id: "expense.summary" module: "expense" name: "记账" description: "Full-source CNY total/count; date/period, exact tag, title keyword." run: expense_summary_query tags: true keywords: true}
+    {id: "calendar.next" module: "calendar" name: "日历" description: "Next unfulfilled planned events from today; date/period/title keyword." run: calendar_next_query tags: false keywords: true}
+    {id: "period.history" module: "period" name: "经期记录" description: "User-recorded period date ranges overlapping date/period; no forecast. Use only when explicitly asked about period records." run: period_history_query tags: false keywords: false}
+] }

@@ -1,0 +1,11 @@
+// Read-only guide navigation. Content is embedded by build_event_app.py.
+let help_topic = -1
+let help_was_open = false
+fn open_help(){
+    if screen == "help" { return }
+    if screen == "picker" { picker_close() }
+    help_was_open = workspace_open
+    push_route() help_topic = -1 go("help")
+}
+fn help_back(){ view_back() workspace_open = help_was_open redraw() }
+fn help_select(index){ help_topic = index ui.help_content.render() }
