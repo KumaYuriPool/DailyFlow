@@ -463,6 +463,238 @@
       "shareable": false,
       "private_data": true,
       "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.experience_context",
+      "description": "Read only the active DailyFlow experience task context by the exact request_id supplied by the UI. Returns current allowed catalog or bounded source records. Never writes source records. Old or cancelled task IDs fail closed.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": false,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.experience_result",
+      "description": "Submit structured suggestions for the currently active read-only experience task. First read experience_context using the same request_id; submit plan for selection phase or organization for organize phase. No source write and no user confirmation. Expired or invalid references are rejected.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "intent": {
+                "type": "string",
+                "enum": [
+                  "query",
+                  "clarify"
+                ]
+              },
+              "topic": {
+                "type": "string"
+              },
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "question": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "intent",
+              "topic",
+              "start",
+              "end",
+              "sources",
+              "question"
+            ],
+            "additionalProperties": false
+          },
+          "organization": {
+            "type": "object",
+            "properties": {
+              "claims": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source_app": {
+                            "type": "string"
+                          },
+                          "source_module": {
+                            "type": "string"
+                          },
+                          "record_id": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer"
+                          },
+                          "quote": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "source_app",
+                          "source_module",
+                          "record_id",
+                          "revision",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 4
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 6
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "same_experience",
+                        "sequence",
+                        "supports"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "source_app": {
+                          "type": "string"
+                        },
+                        "source_module": {
+                          "type": "string"
+                        },
+                        "record_id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer"
+                        },
+                        "quote": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "source_app",
+                        "source_module",
+                        "record_id",
+                        "revision",
+                        "quote"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "source_app": {
+                          "type": "string"
+                        },
+                        "source_module": {
+                          "type": "string"
+                        },
+                        "record_id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer"
+                        },
+                        "quote": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "source_app",
+                        "source_module",
+                        "record_id",
+                        "revision",
+                        "quote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "title",
+                    "reason",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 12
+              }
+            },
+            "required": [
+              "claims",
+              "edges"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": false,
+      "private_data": true,
+      "implemented_by": "app"
     }
   ]
 }

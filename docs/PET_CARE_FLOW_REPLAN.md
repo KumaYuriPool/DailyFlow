@@ -1,5 +1,7 @@
 # DailyFlow 收敛计划：宠物护理事件 × 记账 × 双视图日历
 
+> 2026-10-09：本文件是收敛阶段的历史记录，不再是当前主计划。产品定义、后续阶段和比赛日程分别见[PRODUCT_SPEC](PRODUCT_SPEC.md)、[PRODUCT_ROADMAP](PRODUCT_ROADMAP.md)、[SEMIFINAL_PLAN](SEMIFINAL_PLAN.md)。保留下面历史内容用于追溯，不恢复旧范围或旧UI要求。
+
 2026-10-06 产品规划入口更新：[PRODUCT_ROADMAP](PRODUCT_ROADMAP.md) 提炼当前定位、概念、设计评估和后续阶段。本文继续保留收敛阶段实施历史，下方“唯一主入口”、旧版本与“尚未实施”均是当时语境，不覆盖后续经期接入、按需回顾及0.6.4状态。
 
 2026-10-06 最新范围：用户明确继续建设通用时间协议，并加入“经期记录”作为第三个伪App。0.6.0实现见 [TIME_EVENT_PROTOCOL](TIME_EVENT_PROTOCOL.md)；下文删除经期入口的旧阶段限制被本次明确授权覆盖，历史数据仍保留。Flow后台组织、用户按需回顾为后续界面方向，不能把旧常驻列表当最终产品目标。

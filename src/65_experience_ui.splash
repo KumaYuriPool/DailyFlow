@@ -1,0 +1,177 @@
+experience_shell := SolidView{width: Fill height: Fill flow: Right draw_bg.color: #xf7f6f1 on_render: || {
+    let rail_width = 88 if layout_wide { rail_width = 196 }
+    SolidView{width: rail_width height: Fill flow: Down padding: 10 spacing: 10 draw_bg.color: #xeef1e9
+        let brand = "DF" if layout_wide { brand = "DailyFlow" }
+        Label{width: Fill text: brand draw_text.color: ink draw_text.text_style.font_size: 18}
+        Label{width: Fill text: "经历目录" draw_text.color: muted draw_text.text_style.font_size: 11}
+        experience_ready := Label{width: Fill text: message draw_text.color: muted draw_text.text_style.font_size: 9}
+        TextInput{width: Fill height: 34 text: ex_search empty_text: "搜索经历" on_change: |v| { ex_search = v ex_redraw() }}
+        ButtonFlat{width: Fill height: 36 text: "+ 新建经历" on_click: || ex_new()}
+        ex_directory := ScrollYView{width: Fill height: Fill flow: Down spacing: 7
+            if ex_store != nil && !ex_store_error {
+                for it in ex_store.items { if ex_search == "" || it.title.search(ex_search) >= 0 { ButtonFlat{width: Fill height: 52 text: it.title on_click: || ex_select(it)} } }
+                if ex_store.items.len() == 0 { Label{width: Fill text: "保存一段回顾，\n从这里继续。" draw_text.color: muted draw_text.text_style.font_size: 11} }
+            }
+        }
+        ButtonFlat{width: Fill height: 36 text: "我的空间" on_click: || ex_legacy()}
+        ButtonFlat{width: Fill height: 36 text: "设置" on_click: || { ex_settings = !ex_settings ex_detail = "" ex_redraw() }}
+    }
+    View{width: Fill height: Fill flow: Down padding: 16 spacing: 10
+        View{width: Fill height: 32 flow: Right spacing: 6
+            Label{width: Fill text: ex_title draw_text.color: ink draw_text.text_style.font_size: 20 draw_text.text_overflow: Ellipsis draw_text.max_lines: 1}
+            ButtonFlat{width: 54 height: 30 text: "布局" on_click: || { layout_wide = !layout_wide ex_redraw() }}
+        }
+        if ex_settings {
+            ButtonFlat{width: Fill height: 34 text: "回到经历" on_click: || { ex_settings = false ex_redraw() }}
+                ButtonFlat{width: Fill height: 34 text: "助手入口 · " + ex_adapter on_click: || { ex_cancel() if ex_adapter == "official" { ex_adapter = "model" } else { ex_adapter = "official" } ex_redraw() }}
+            ScrollYView{width: Fill height: Fill flow: Down spacing: 14
+                Label{width: Fill text: "设置" draw_text.color: ink draw_text.text_style.font_size: 22}
+                Label{width: Fill text: "来源与读取范围" draw_text.color: accent draw_text.text_style.font_size: 15}
+                Label{width: Fill text: "这些是本机已导入的数据。关闭后不再展示，也不送给助手；这里的开关不代表宿主授权。" draw_text.color: muted draw_text.text_style.font_size: 12}
+                if timeline_data != nil {
+                    for source in timeline_data.sources {
+                        let label = "允许读取 · " + source.source_app if ex_source_enabled(source.source_app) { label = "停止读取 · " + source.source_app }
+                        ButtonFlat{width: Fill height: 40 text: label on_click: || ex_toggle_source(source.source_app)}
+                    }
+                    Label{width: Fill text: timeline_source_status_line() draw_text.color: muted draw_text.text_style.font_size: 11}
+                }
+                Label{width: Fill text: "文件导入" draw_text.color: accent draw_text.text_style.font_size: 15}
+                Label{width: Fill text: "当前为文件导入路线。先按仓库导入说明运行 tools/sync_timeline_import.py，将 timeline-imported.json 放入应用数据目录，再点击下方重新读取。这里不会启动外部脚本或连接社媒。" draw_text.color: muted draw_text.text_style.font_size: 12}
+                ButtonFlat{width: Fill height: 36 text: "重新读取已导入数据" on_click: || ex_refresh()}
+                Label{width: Fill text: "备份与同步" draw_text.color: accent draw_text.text_style.font_size: 15}
+                Label{width: Fill text: "当前保存在本机，无需登录。云端同步尚未开放；没有上传数据。原有本地备份在我的空间 → 数据。" draw_text.color: muted draw_text.text_style.font_size: 12}
+                Label{width: Fill text: "官方 Agent 使用宿主的 Provider 和授权；模型直连可作为显式备用入口。两者都只读取本次范围，来源仍为导入快照。" draw_text.color: muted draw_text.text_style.font_size: 12}
+            }
+        } else {
+            Label{width: Fill text: "把分散的记录，放回同一段经历里。" draw_text.color: muted draw_text.text_style.font_size: 12}
+            if ex_topic == "" {
+                ScrollYView{width: Fill height: Fill flow: Down spacing: 12
+                    Label{width: Fill text: "想把哪段经历串起来？" draw_text.color: ink draw_text.text_style.font_size: 23}
+                    Label{width: Fill text: "可以直接提问，让助手选择主题和必要来源；也可以先浏览已导入的样本。" draw_text.color: muted draw_text.text_style.font_size: 12}
+                    for topic in ex_topics() { ButtonFlat{width: Fill height: 48 text: "浏览 · " + ex_label(topic) on_click: || ex_browse(topic)} }
+                    if timeline_error != "" { Label{width: Fill text: timeline_error draw_text.color: muted draw_text.text_style.font_size: 12} }
+                    ButtonFlat{width: Fill height: 34 text: "重新读取已导入数据" on_click: || ex_refresh()}
+                }
+            } else {
+                Label{width: Fill text: ex_visible().len() + " 条记录 · 文件导入样本 · " + ex_start + " — " + ex_end draw_text.color: muted draw_text.text_style.font_size: 11}
+                Label{width: Fill text: ex_money_line() draw_text.color: accent draw_text.text_style.font_size: 12}
+                if ex_diff != "" { Label{width: Fill text: ex_diff draw_text.color: muted draw_text.text_style.font_size: 11} }
+                View{width: Fill height: 34 flow: Right spacing: 6
+                    ButtonFlat{width: Fill height: 32 text: "重新读取" on_click: || ex_refresh()}
+                    let removed_label = "已排除" if ex_removed { removed_label = "返回时间流" }
+                    ButtonFlat{width: Fill height: 32 text: removed_label on_click: || { ex_removed = !ex_removed ex_detail = "" ex_redraw() }}
+                    if ex_id == "" { ButtonFlat{width: Fill height: 32 text: "保存为经历" on_click: || ex_save()} }
+                }
+                View{width: Fill height: 30 flow: Right spacing: 5
+                    ButtonFlat{width: Fill height: 30 text: "原始时间流" on_click: || { ex_panel = "timeline" ex_detail = "" ex_redraw() }}
+                    ButtonFlat{width: Fill height: 30 text: "经历概括" on_click: || { ex_panel = "overview" ex_detail = "" ex_redraw() }}
+                    ButtonFlat{width: Fill height: 30 text: "核对关联 · " + ex_reason_rows().len() on_click: || { ex_panel = "relations" ex_detail = "" ex_redraw() }}
+                }
+                View{width: Fill height: Fill flow: Right spacing: 10
+                    if ex_detail == "" || layout_wide {
+                        ScrollYView{width: Fill height: Fill flow: Down spacing: 12
+                            if !ex_removed {
+                                let overview = ex_reason_claims()
+                                if ex_panel == "overview" && overview.len() == 0 { Label{width: Fill text: "还没有当前有效的概括。请让助手整理这段经历；来源更正后旧概括会隐藏。" draw_text.color: muted draw_text.text_style.font_size: 12} }
+                                if ex_panel == "overview" && overview.len() > 0 {
+                                    Label{width: Fill text: "这段经历的脉络 · 助手概括" draw_text.color: accent draw_text.text_style.font_size: 16}
+                                    for claim in overview {
+                                        SolidView{width: Fill height: Fit flow: Down padding: 10 spacing: 5 draw_bg.color: #xeef2e8
+                                            Label{width: Fill text: claim.text draw_text.color: ink draw_text.text_style.font_size: 13}
+                                            for ref in claim.evidence { ButtonFlat{width: Fill height: 30 text: "查看依据 · " + ref.quote on_click: || { ex_detail = ex_reason_ref_key(ref) ex_redraw() }} }
+                                        }
+                                    }
+                                }
+                                if ex_panel == "relations" {
+                                let edges = ex_reason_rows()
+                                if edges.len() == 0 { Label{width: Fill text: "暂无候选关系；请让助手整理。没有候选不等于所有记录互不相关。" draw_text.color: muted draw_text.text_style.font_size: 12} }
+                                if edges.len() > 0 { Label{width: Fill text: "这些记录，可能怎样相连" draw_text.color: accent draw_text.text_style.font_size: 15} }
+                                for edge in edges {
+                                    SolidView{width: Fill height: Fit flow: Down padding: 10 spacing: 6 draw_bg.color: #xffffff
+                                        let state = ex_reason_status(edge)
+                                        Label{width: Fill text: ex_reason_label(state) draw_text.color: accent draw_text.text_style.font_size: 11}
+                                        if state != "invalid" {
+                                            Label{width: Fill text: edge.title draw_text.color: ink draw_text.text_style.font_size: 14}
+                                            Label{width: Fill text: edge.reason draw_text.color: muted draw_text.text_style.font_size: 12}
+                                            ButtonFlat{width: Fill height: 30 text: "起点 · " + edge.from.quote on_click: || { ex_detail = ex_reason_ref_key(edge.from) ex_redraw() }}
+                                            ButtonFlat{width: Fill height: 30 text: "另一条 · " + edge.to.quote on_click: || { ex_detail = ex_reason_ref_key(edge.to) ex_redraw() }}
+                                            View{width: Fill height: 30 flow: Right spacing: 6
+                                                if state != "confirmed" { ButtonFlat{width: Fill height: 30 text: "确认相关" on_click: || ex_reason_decide(edge,"confirmed")} }
+                                                if state != "rejected" { ButtonFlat{width: Fill height: 30 text: "不相关" on_click: || ex_reason_decide(edge,"rejected")} }
+                                                if state != "pending" { ButtonFlat{width: Fill height: 30 text: "重新核对" on_click: || ex_reason_decide(edge,"clear")} }
+                                            }
+                                        }
+                                    }
+                                }
+                                if ex_reason_undo_last != nil { ButtonFlat{width: Fill height: 30 text: "撤销上次关联决定" on_click: || ex_reason_undo()} }
+                            }
+                            }
+                            if ex_panel == "timeline" || ex_removed {
+                            Label{width: Fill text: "同日记录放在一起，相关性由你核对。" draw_text.color: muted draw_text.text_style.font_size: 11}
+                            for date in ex_dates() {
+                                Label{width: Fill text: date draw_text.color: accent draw_text.text_style.font_size: 14}
+                                for r in ex_for_date(date) {
+                                    SolidView{width: Fill height: Fit flow: Down padding: 12 spacing: 7 draw_bg.color: #xffffff
+                                        Label{width: Fill text: r.title draw_text.color: ink draw_text.text_style.font_size: 15}
+                                        Label{width: Fill text: timeline_kind_label(r.kind) + " · " + r.source_app draw_text.color: muted draw_text.text_style.font_size: 11}
+                                        if r.suspicious || r.future { Label{width: Fill text: timeline_flags(r) draw_text.color: #x8a6d00 draw_text.text_style.font_size: 11} }
+                                        if r.kind == "expense" {
+                                            let amount_label = "金额待补充"
+                                            if r.amount_minor >= 0 { amount_label = business_optional(r,"currency","") + " " + money(r.amount_minor) }
+                                            Label{width: Fill text: amount_label draw_text.color: accent draw_text.text_style.font_size: 14}
+                                        }
+                                        if ex_removed {
+                                            if timeline_record_excluded(r) { Label{width: Fill text: "来源或旧时间流已排除；请在原入口核对。" draw_text.color: muted draw_text.text_style.font_size: 11} }
+                                            else { ButtonFlat{width: Fill height: 30 text: "恢复到这段经历" on_click: || ex_decide(r,"membership","clear")} }
+                                        } else {
+                                            ButtonFlat{width: Fill height: 30 text: "查看记录" on_click: || { ex_detail = ex_key(r) ex_redraw() }}
+                                            if r.kind == "expense" && !r.future {
+                                                let fee_label = "确认计入这段经历" if ex_confirmed(r) { fee_label = "撤销费用确认" }
+                                                let fee_action = "confirm" if ex_confirmed(r) { fee_action = "clear" }
+                                                ButtonFlat{width: Fill height: 30 text: fee_label on_click: || ex_decide(r,"expense",fee_action)}
+                                                let decision = ex_decision(r,"expense")
+                                                if decision != nil && decision.revision != r.revision { Label{width: Fill text: "来源已更正，请重新核对费用。" draw_text.color: #x8a6d00 draw_text.text_style.font_size: 11} }
+                                            }
+                                            ButtonFlat{width: Fill height: 30 text: "从这段经历移除" on_click: || ex_decide(r,"membership","exclude")}
+                                        }
+                                    }
+                                }
+                            }
+                            if ex_dates().len() == 0 { Label{width: Fill text: "当前范围内没有可展示的记录。" draw_text.color: muted draw_text.text_style.font_size: 12} }
+                            }
+                        }
+                    }
+                    if ex_detail != "" {
+                        SolidView{width: Fill height: Fill flow: Down padding: 12 spacing: 10 draw_bg.color: #xffffff
+                            ButtonFlat{width: Fill height: 32 text: "‹ 返回时间流" on_click: || { ex_detail = "" ex_redraw() }}
+                            Label{width: Fill text: "记录详情" draw_text.color: ink draw_text.text_style.font_size: 18}
+                            ScrollYView{width: Fill height: Fill flow: Down spacing: 12
+                                let d = ex_detail_record()
+                                if d == nil { Label{width: Fill text: "这条记录已不在可访问的当前范围中，旧内容已隐藏。" draw_text.color: muted draw_text.text_style.font_size: 12} }
+                                else {
+                                    Label{width: Fill text: "来自 " + d.source_app + " · " + d.date draw_text.color: muted draw_text.text_style.font_size: 11}
+                                    Label{width: Fill text: d.title draw_text.color: ink draw_text.text_style.font_size: 17}
+                                    Label{width: Fill text: d.body draw_text.color: ink draw_text.text_style.font_size: 13}
+                                    Label{width: Fill text: "为什么出现在这里" draw_text.color: accent draw_text.text_style.font_size: 13}
+                                    Label{width: Fill text: "来源记录属于所选主题与日期范围。同日展示不表示已经确认关联。" draw_text.color: muted draw_text.text_style.font_size: 12}
+                                    Label{width: Fill text: "来源信息 · " + ex_key(d) + " · rev " + d.revision draw_text.color: muted draw_text.text_style.font_size: 10}
+                                    Label{width: Fill text: d.citation draw_text.color: muted draw_text.text_style.font_size: 10}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Label{width: Fill text: ex_status draw_text.color: muted draw_text.text_style.font_size: 11}
+            if ex_last_undo != nil { ButtonFlat{width: Fill height: 28 text: "撤销上次决定" on_click: || ex_undo()} }
+            if ex_show_process { ScrollYView{width: Fill height: 88 flow: Down spacing: 4 for event in ex_events { Label{width: Fill text: event.sequence + ". " + event.text draw_text.color: muted draw_text.text_style.font_size: 10} }} }
+            experience_input := TextInput{width: Fill height: 44 text: ex_question empty_text: "问问这段经历，比如：我是怎么开始攀岩的？" on_change: |v| { ex_question = v } on_return: |v| ex_send()}
+            View{width: Fill height: 34 flow: Right spacing: 6
+                let send_label = "请助手整理" if ex_busy { send_label = "正在整理…" }
+                ButtonFlat{width: Fill height: 34 text: send_label on_click: || ex_send()}
+                if ex_busy { ButtonFlat{width: 58 height: 34 text: "停止" on_click: || { ex_cancel() ex_redraw() }} }
+                ButtonFlat{width: 72 height: 34 text: "整理过程" on_click: || { ex_show_process = !ex_show_process ex_redraw() }}
+            }
+        }
+    }
+}}

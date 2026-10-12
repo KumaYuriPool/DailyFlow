@@ -1,0 +1,2 @@
+# Source reader probe
+Ask the host for probeledger.events only when the user requests this synthetic source. Report the exact tool owner and structured result if available; if absent or refused, report that outcome. Never fabricate a returned record, substitute another app, use os.* identity or request developer mode. Receiving a result does not import it into DailyFlow. This app has no importer or persistent projection.

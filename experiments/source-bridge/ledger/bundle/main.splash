@@ -1,0 +1,35 @@
+// Candidate only. In-memory synthetic fixture, not an accounting application.
+let revision = 1
+fn fixture_event() {
+    let identity = "dev.dailyflow.probeledger/expense/probe-1"
+    if revision == 3 {
+        return {protocol_version: 2 event_id: identity change_id: identity + "/3" source_app: "dev.dailyflow.probeledger" source_module: "expense" source_record_id: "probe-1" source_revision: 3 operation: "delete" deleted_at: 1791284000}
+    }
+    let amount = 12000 if revision == 2 { amount = 10000 }
+    return {
+        protocol_version: 2 event_id: identity change_id: identity + "/" + revision
+        source_app: "dev.dailyflow.probeledger" source_module: "expense" source_record_id: "probe-1" source_revision: revision
+        operation: "upsert" event_type: "expense" summary: "Synthetic grooming record"
+        date: "2026-10-02" end_date: "" open_end: false time: "" time_precision: "day" timezone: "Asia/Shanghai"
+        occurred_at: "" scheduled_at: "" status: "occurred"
+        created_at: 1791283900 recorded_at: 1791283900 updated_at: 1791283900 + revision
+        amount_minor: amount currency: "CNY" flow_ids: []
+        entry: {target: "expense" record_id: "probe-1" source_revision: revision action: "detail" actions: ["detail"]}
+    }
+}
+fn app_tool(name, call_id) {
+    let request = mod.app_tools.request(call_id)
+    if name != "probeledger.events" { mod.app_tools.fail(call_id, "Unknown fixture tool"); return }
+    mod.app_tools.complete(call_id, {status: "ok" source_app: "dev.dailyflow.probeledger" events: [fixture_event()] complete: true offset: 0 snapshot_revision: revision})
+}
+fn advance_fixture() {
+    if revision < 3 { revision += 1 }
+    ui.status.set_text("Synthetic revision: " + revision)
+}
+SolidView {width: Fill height: Fill flow: Down padding: 24 spacing: 16
+    Label {text: "Synthetic Ledger Probe"}
+    Label {width: Fill text: "In-memory fixture only; resets when this application restarts."}
+    status := Label {text: "Synthetic revision: 1"}
+    Label {width: Fill text: "Revision 1: CNY 120. Revision 2: CNY 100. Revision 3: deleted."}
+    Button {text: "Advance synthetic fixture" on_click: || advance_fixture()}
+}

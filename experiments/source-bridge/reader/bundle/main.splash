@@ -1,0 +1,7 @@
+// Candidate grant probe only; no importer and no direct RPC bypass.
+SolidView {width: Fill height: Fill flow: Down padding: 24 spacing: 16
+    Label {text: "Source Reader Probe"}
+    Label {width: Fill text: "Ask this app agent to call probeledger.events."}
+    Label {width: Fill text: "Candidate only. No source result has been imported."}
+    Label {width: Fill text: "Do not enable developer mode or use a system app identity."}
+}

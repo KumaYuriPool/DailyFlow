@@ -141,7 +141,7 @@ fn boot(){
     if !va && !vb && (fs.exists("state-a.json") || fs.exists("state-b.json")) { locked = true message = "存储损坏，已停止写入；请从备份恢复。" }
     if !va && !vb && !locked && fs.exists("expenses.json") { message = "检测到旧账本；设置中可导入，原文件不会改动。" }
     selected = today() let t = selected.split("-") yy = t[0].to_f64() mm = t[1].to_f64() jump_date = selected context_date = selected
-    loaded = true repair_source_relations() calendar_rebuild()
+    loaded = true repair_source_relations() calendar_rebuild() ex_load()
     redraw()
 }
 fn shift_month(delta){

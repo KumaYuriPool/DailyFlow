@@ -1,5 +1,7 @@
 # DailyFlow 4-Bundle 拆分设计方案
 
+> 2026-10-09：本文仍为历史方案。新的独立来源目标见[PRODUCT_SPEC](PRODUCT_SPEC.md)与[PRODUCT_ROADMAP](PRODUCT_ROADMAP.md)。RC2第三方App工具目标解析存在待复现限制，不能把本文件旧验证标题当作任意商店App互通证明；见[RC2核对](OCTOSENSE_RC2_REVIEW.md)。本轮不要求四App拆分。
+
 > 历史方案，非当前实现。2026-10-06 当前为一个 `dailyflow` bundle，内部记账、日历和 Flow 是伪 App 模块。当前主体身份与按需查询协议见 [MODULE_QUERY_PROTOCOL.md](MODULE_QUERY_PROTOCOL.md)。下文保留作历史参考，不能据此宣称已接入独立 App 间调用。
 
 **日期**：2026-10-02（更新）

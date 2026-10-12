@@ -1,0 +1,186 @@
+{
+  "0": {
+    "data": {
+      "events": [
+        {
+          "amount_minor": 0,
+          "change_id": "dailyflow/period/period3/1",
+          "created_at": 1791283868.071189,
+          "currency": "",
+          "date": "2026-09-29",
+          "end_date": "2026-10-03",
+          "entry": {
+            "action": "detail",
+            "actions": [
+              "detail",
+              "edit",
+              "delete"
+            ],
+            "record_id": "period3",
+            "source_revision": 1,
+            "target": "period"
+          },
+          "event_id": "dailyflow/period/period3",
+          "event_type": "period_entry",
+          "flow_ids": [],
+          "occurred_at": "",
+          "open_end": false,
+          "operation": "upsert",
+          "protocol_version": 2,
+          "recorded_at": 1791283868.071189,
+          "scheduled_at": "",
+          "source_app": "dailyflow",
+          "source_module": "period",
+          "source_record_id": "period3",
+          "source_revision": 1,
+          "status": "occurred",
+          "summary": "经期",
+          "time": "",
+          "time_precision": "day",
+          "timezone": "Asia/Shanghai",
+          "updated_at": 1791283868.0711925
+        },
+        {
+          "amount_minor": 3500,
+          "change_id": "dailyflow/expense/r1/1",
+          "created_at": 1791283867.35338,
+          "currency": "CNY",
+          "date": "2026-10-02",
+          "end_date": "",
+          "entry": {
+            "action": "detail",
+            "actions": [
+              "detail",
+              "edit",
+              "delete"
+            ],
+            "record_id": "r1",
+            "source_revision": 1,
+            "target": "expense"
+          },
+          "event_id": "dailyflow/expense/r1",
+          "event_type": "expense",
+          "flow_ids": [],
+          "occurred_at": "",
+          "open_end": false,
+          "operation": "upsert",
+          "protocol_version": 2,
+          "recorded_at": 1791283867.35338,
+          "scheduled_at": "",
+          "source_app": "dailyflow",
+          "source_module": "expense",
+          "source_record_id": "r1",
+          "source_revision": 1,
+          "status": "occurred",
+          "summary": "午餐",
+          "time": "",
+          "time_precision": "day",
+          "timezone": "Asia/Shanghai",
+          "updated_at": 1791283867.3533828
+        },
+        {
+          "amount_minor": 0,
+          "change_id": "dailyflow/calendar/evt2/1",
+          "created_at": 1791283867.362528,
+          "currency": "",
+          "date": "2026-12-01",
+          "end_date": "",
+          "entry": {
+            "action": "detail",
+            "actions": [
+              "detail",
+              "edit",
+              "delete"
+            ],
+            "record_id": "evt2",
+            "source_revision": 1,
+            "target": "calendar"
+          },
+          "event_id": "dailyflow/calendar/evt2",
+          "event_type": "event",
+          "flow_ids": [],
+          "occurred_at": "",
+          "open_end": false,
+          "operation": "upsert",
+          "protocol_version": 2,
+          "recorded_at": 1791283867.362528,
+          "scheduled_at": "2026-12-01T15:00:00+08:00",
+          "source_app": "dailyflow",
+          "source_module": "calendar",
+          "source_record_id": "evt2",
+          "source_revision": 1,
+          "status": "planned",
+          "summary": "下次洗护",
+          "time": "15:00",
+          "time_precision": "minute",
+          "timezone": "Asia/Shanghai",
+          "updated_at": 1791283867.362532
+        }
+      ],
+      "has_more": false,
+      "next_offset": 3,
+      "offset": 0,
+      "ok": true,
+      "protocol_version": 2,
+      "read_only": true,
+      "snapshot_revision": 3,
+      "total": 3
+    },
+    "index": 0,
+    "ok": true
+  },
+  "1": {
+    "data": {
+      "events": [
+        {
+          "amount_minor": 0,
+          "change_id": "dailyflow/period/period3/1",
+          "created_at": 1791283868.071189,
+          "currency": "",
+          "date": "2026-09-29",
+          "end_date": "2026-10-03",
+          "entry": {
+            "action": "detail",
+            "actions": [
+              "detail",
+              "edit",
+              "delete"
+            ],
+            "record_id": "period3",
+            "source_revision": 1,
+            "target": "period"
+          },
+          "event_id": "dailyflow/period/period3",
+          "event_type": "period_entry",
+          "flow_ids": [],
+          "occurred_at": "",
+          "open_end": false,
+          "operation": "upsert",
+          "protocol_version": 2,
+          "recorded_at": 1791283868.071189,
+          "scheduled_at": "",
+          "source_app": "dailyflow",
+          "source_module": "period",
+          "source_record_id": "period3",
+          "source_revision": 1,
+          "status": "occurred",
+          "summary": "经期",
+          "time": "",
+          "time_precision": "day",
+          "timezone": "Asia/Shanghai",
+          "updated_at": 1791283868.0711925
+        }
+      ],
+      "has_more": false,
+      "next_offset": 1,
+      "offset": 0,
+      "ok": true,
+      "protocol_version": 2,
+      "read_only": true,
+      "snapshot_revision": 3,
+      "total": 1
+    },
+    "index": 1,
+    "ok": true
+  }
+}

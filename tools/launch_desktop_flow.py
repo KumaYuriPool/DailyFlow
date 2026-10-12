@@ -80,6 +80,9 @@ def launch(args):
     binary = args.binary.expanduser().resolve()
     bundle = args.bundle.expanduser().resolve()
     core = args.core_dir.expanduser().resolve()
+    kernel = args.kernel_binary.expanduser().resolve() if args.kernel_binary else None
+    if kernel and not kernel.is_file():
+        raise RuntimeError(f"未找到指定内核：{kernel}")
     if not binary.is_file():
         raise RuntimeError(f"未找到已有桌面程序：{binary}")
     if not (bundle / "manifest.json").is_file():
@@ -95,13 +98,20 @@ def launch(args):
                 raise RuntimeError("启动记录损坏，请检查 launcher-process.json 后再启动。") from None
             if previous.get("running") and process_alive(previous.get("pid")):
                 raise RuntimeError("此前 DailyFlow 桌面仍在运行，请先关闭其窗口，避免同时写入。")
-        app_id, _, anchor = stage_local_catalog(bundle, root / "apps")
+        try:
+            app_id, _, anchor = stage_local_catalog(bundle, root / "apps", hub_binary=args.hub_binary)
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or error.stdout or b"").decode("utf-8", errors="replace").strip()
+            raise RuntimeError("所选 Hub 未通过应用检查；请使用与目标宿主兼容的 --hub-binary。\n" + detail) from error
         env = dict(os.environ)
         for key in ("MAKEPAD_REMOTE", "MAKEPAD_HIDE_WINDOWS", "MAKEPAD_WM_TEST_APP", "OCTOS_APP_CORE_BIN"):
             env.pop(key, None)
         env.update(OCTOSENSE_HOME=str(root / "home"), OCTOSENSE_APP_DATA=str(root / "apps"),
                    OCTOSENSE_HUB=str(root / "apps"), OCTOSENSE_HUB_ANCHOR=anchor,
+                   OCTOSENSE_HUB_CATALOG="legacy",
                    OCTOS_APP_CORE_DIR=str(core))
+        if kernel:
+            env["OCTOS_APP_CORE_BIN"] = str(kernel)
         if args.hidden:
             env["MAKEPAD_HIDE_WINDOWS"] = "1"
         if args.test_remote_port:
@@ -110,7 +120,8 @@ def launch(args):
         with log_path.open("a", encoding="utf-8") as log:
             log.write(f"\n--- DailyFlow local launch {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
             log.flush()
-            child = subprocess.Popen([str(binary), "--test-action", "launch-hub:" + app_id],
+            actions = ["--test-action", "launch-calendar"] if args.warm_card_runner else []
+            child = subprocess.Popen([str(binary), *actions, "--test-action", "launch-hub:" + app_id],
                                      cwd=binary.parent, env=env, stdout=log, stderr=subprocess.STDOUT,
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             metadata = {"pid": child.pid, "launcher_pid": os.getpid(), "running": True,
@@ -137,7 +148,10 @@ def main():
     parser.add_argument("--bundle", type=Path, default=ROOT / "bundle")
     parser.add_argument("--data-dir", type=Path, default=ROOT / ".local-state/desktop")
     parser.add_argument("--core-dir", type=Path, default=default_core_dir())
+    parser.add_argument("--kernel-binary", type=Path, help="Explicit compatible kernel for the selected Shell")
     parser.add_argument("--binary", type=Path, default=native_runtime.binary("shell"))
+    parser.add_argument("--hub-binary", type=Path, default=native_runtime.binary("hub"), help="Hub CLI matching the selected runtime; --binary does not select this automatically")
+    parser.add_argument("--warm-card-runner", action="store_true", help="RC2 local test workaround: open built-in Calendar before the script app; no consent is granted")
     parser.add_argument("--hidden", action="store_true", help="Developer test: hide the window")
     parser.add_argument("--test-remote-port", type=int, default=0, help="Developer test only: enable local UI test API")
     args = parser.parse_args()

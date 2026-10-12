@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "dev.dailyflow.probeconsumer",
+  "name": "Source Reader Probe",
+  "version": "0.0.1",
+  "capabilities": [
+    "runtime"
+  ],
+  "requires": [
+    "host-api-v1",
+    "script-tools-v1"
+  ],
+  "host_api": {
+    "required": {
+      "app_tools.dispatch": 1
+    }
+  },
+  "agent": {
+    "background": false,
+    "instructions": "AGENT.md",
+    "profile": "read-only",
+    "tools": [
+      "probeledger.events"
+    ],
+    "model": {
+      "needs": [
+        "tool_calling"
+      ]
+    }
+  }
+}

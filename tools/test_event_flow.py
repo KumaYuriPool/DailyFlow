@@ -9,7 +9,7 @@ def data(results,i):
     return results[i]['data']
 
 def run(output,binary=None):
-    d.configure(Path('bundle'),output,Path(binary or '../OctoSense-App-Hub/target/release/card-host.exe'))
+    d.configure(Path('bundle'),output,Path(binary or '../OctoSense-App-Hub/target/release/card-host.exe'),legacy_vm_fixture=True)
     state=output/'state'
     first=apply('golden',kind='expense',title='团子洗护费',date=d.DAY,amount='120',subject='团子',topic='护理',event_title='团子洗护',plan_title='再次护理',plan_date=d.FUTURE_DAY,plan_time='15:00',evidence='用户明确事项及后续安排')
     results=d.run('create',[first,first,d.query(),{'name':'dailyflow.flow_query','args':{}}],state)
@@ -33,6 +33,7 @@ def run(output,binary=None):
     latest=d.latest(state);assert len(latest['tombstones'])==1 and latest['relations']==[]
     assert (state/'dailyflow/pre-event-flow-v1.json').exists()
     report={'passed':True,'real_splash_calls':15,'checks':['compound independent fact/expense/plan IDs','typed semantic relations','durable replay','same-ID correction','stale revision rejected','compound failure rollback','expense delete preserves events','receipt replay does not revive deletion','Flow delete preserves source events','restart persistence','migration backup']}
+    report['legacy_vm_fixture']=d.fixture_metadata()
     (output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');print(json.dumps(report,ensure_ascii=False))
 
 if __name__=='__main__':

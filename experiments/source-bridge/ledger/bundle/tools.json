@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "tools": [
+    {
+      "name": "probeledger.events",
+      "description": "Read one synthetic fixture record or its explicit tombstone. No private data, network or writes.",
+      "implemented_by": "app",
+      "risk": "read",
+      "background": false,
+      "shareable": true,
+      "private_data": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "source_app",
+          "events",
+          "complete",
+          "offset",
+          "snapshot_revision"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "source_app": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "snapshot_revision": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

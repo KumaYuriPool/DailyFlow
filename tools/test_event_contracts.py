@@ -6,7 +6,7 @@ from test_event_flow import apply,data
 ROOT=Path(__file__).resolve().parents[1]
 
 def run(out,binary=None):
-    d.configure(ROOT/'bundle',out,binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe')
+    d.configure(ROOT/'bundle',out,binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe',legacy_vm_fixture=True)
     # A real minimal Splash app loads only the projection reducer, no expense UI/store.
     main=(ROOT/'src/08_time_protocol.splash').read_text(encoding='utf8')
     reducer=(ROOT/'src/00_storage.splash').read_text(encoding='utf8')+'\n'+main+'\nfn time_modules(){ return [{id: "expense"}] }\n'
@@ -42,6 +42,7 @@ SolidView{width: Fill height: Fill Label{text: "Protocol fixture"}}
     r=d.run('storage-fault',[apply('blocked',kind='expense',title='不应保存',date=d.DAY,amount='9'),d.query()],failed)
     assert not data(r,0)['ok'];assert data(r,1)['total']==1;assert json.loads((f/'state-a.json').read_text(encoding='utf8'))==failed_legacy
     report={'passed':True,'protocol_fixture_without_expense_ui':True,'checks':['duplicate revision idempotent','stale revision ignored','delete tombstone prevents resurrection','historical source bytes preserved semantically','unsupported records/Flow names excluded','pre-migration complete backup','actual slot write failure leaves prior state unchanged']}
+    report['legacy_vm_fixture']=d.fixture_metadata()
     (out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');print(json.dumps(report,ensure_ascii=False))
 
 if __name__=='__main__':

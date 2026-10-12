@@ -23,6 +23,12 @@ class UI:
         return matches[0]
 
     def click(self, text=None, ident=None, ty=None):
+        # Existing business checks now enter the preserved local workspace.
+        # New experience tests continue to use their own visible controls.
+        legacy = ('对话', '查找', '时间流', '日历', '账本', '全部', '数据', '帮助', '记一笔')
+        if text in legacy and not any(w.get('t') == text for w in self.widgets()):
+            if any(w.get('t') == '我的空间' for w in self.widgets()):
+                self.click('我的空间')
         w = self.find(text, ident, ty)
         x, y, width, height = w['r']
         self.probe.request('click', x=x+width/2, y=y+height/2, wait=1)

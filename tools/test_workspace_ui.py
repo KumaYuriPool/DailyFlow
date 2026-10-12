@@ -1,5 +1,6 @@
 """Isolated card-host probe and compatibility entry for test_conversation_ui."""
 import argparse,json,os,shutil,socket,subprocess,sys,time,urllib.parse,urllib.request
+import native_runtime
 from pathlib import Path
 from test_real_model_flow import UI
 
@@ -8,8 +9,9 @@ ROOT=Path(__file__).resolve().parents[1]
 class Probe:
     def __init__(self,out,seed=None,size='412x892',binary=None):
         self.size=size
-        self.binary=Path(binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe').resolve()
+        self.binary=native_runtime.verify_selection('card_host', binary or native_runtime.binary('card_host'))
         self.output=out.resolve();self.output.mkdir(parents=True,exist_ok=False);self.apps=self.output/'apps';self.app_id='dailyflow'
+        native_runtime.record_runtime(self.output)
         self.bundle=self.output/'bundle';shutil.copytree(ROOT/'bundle',self.bundle)
         folder=self.apps/self.app_id;folder.mkdir(parents=True)
         if seed:

@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "subtitle": "随手记下来，想起时再找",
-  "description": "DailyFlow 帮你记录日常支出、发生的事与明确的后续安排，用日历按天浏览，或按名字和关键词查找相关记录，沿已确认关系回看时间线。费用、事项和经期记录保留各自来源；查看后可更正原记录，金额由程序统计。提供普通/账本日历、手工经期起止记录、本地备份恢复和内置帮助。当前为 Windows 早期试用版，仍是一个 App 内的多个模块。对话记录、更正和支持的统计查询需要 OctoSense 可用的 model 服务与已配置的模型提供商；无模型时可用手工入口。对话尚不能直接发起完整时间线查找，独立 App 接入、后台提醒和云同步未提供。自动记录有128条收据、命名分组有80个的容量边界，连续长期使用尚未验收。",
+  "subtitle": "把分散的记录，放回同一段经历里",
+  "description": "DailyFlow 把分散记录放回同一段经历。官方应用 Agent 选择已导入的模拟社媒、日历和账目来源，读取限定记录，经结构化工具回传带原文引用的概括及跨事件候选关系。原始时间流、经历概括与关联核对分开展示，可逐条确认、标为不相关、撤销并保存；原文更正、删除或停读使旧依据失效。费用确认与关联决定独立，按币种由程序统计。设置保留模型直连备用入口，旧日历、账本、经期在我的空间。当前为 Windows 0.1.1 本地未发布候选，来源明确标记为导入样本，未接实时社媒或跨 App 自动拉取，未有真实来源图片、账号或云同步。模型建议需要用户核对，不把同日同名当作已确认关联。原业务保留128条自动记录收据和80个命名主体的边界。",
   "category": "productivity",
   "keywords": [
     "calendar",
@@ -10,6 +10,10 @@
     "event"
   ],
   "screenshots": [
+    "screenshots/07-relations.png",
+    "screenshots/06-agent-overview.png",
+    "screenshots/04-experience.png",
+    "screenshots/05-imported-detail.png",
     "screenshots/01-calendar.png",
     "screenshots/02-ledger.png",
     "screenshots/03-recall.png"
@@ -21,9 +25,9 @@
   "publisher": {
     "name": "毛茸茸战队",
     "support": "https://github.com/KumaYuriPool/DailyFlow/issues",
-    "privacy_policy_url": "https://github.com/KumaYuriPool/DailyFlow/blob/v0.1.0/PRIVACY.md"
+    "privacy_policy_url": "https://github.com/KumaYuriPool/DailyFlow/blob/v0.1.1/PRIVACY.md"
   },
-  "release_notes": "0.1.0 早期试用：对话与按需工作区；关键词回顾时间线；三个内部模块共用时间协议；同日事项及关联费用在普通日历合并展示；新增产品定位、核心概念和使用说明，帮助独占右侧工作区。仅 Windows 本地验证，已知限制见应用说明与项目文档。",
+  "release_notes": "0.1.1 工作区候选（未发布）：新增官方 Agent 两阶段结构化回传、带原文引用的经历概括和候选关系核对；支持确认/拒绝/撤销、保存与重启、来源修订失效。两故事真实官方工具调用和取消、显式模型备用入口、原生界面及原功能回归有本地证据。实时跨 App 拉取、图片、云同步仍未实现。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

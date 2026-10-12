@@ -12,16 +12,21 @@
   },
   "capabilities": [
     "storage",
-    "model"
+    "model",
+    "octos.turn.start",
+    "octos.turn.interrupt"
   ],
   "id": "dailyflow",
   "integrity": {
-    "bundle_blake3": "ae1b251fbc9a288d192018b14a3c56fedceecfb33282ee5dbbb1854274d0c7b0"
+    "bundle_blake3": "79f5eed0c4f5eb9363df375767d46e85ceba3b2a1cbee995620fb7edbbd42a48"
   },
   "name": "DailyFlow",
+  "requires": [
+    "script-tools-v1"
+  ],
   "schema": 1,
   "storage": {
     "agent_workspace": "none"
   },
-  "version": "0.1.0"
+  "version": "0.1.1"
 }

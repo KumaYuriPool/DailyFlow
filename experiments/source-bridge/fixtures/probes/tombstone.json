@@ -1,0 +1,21 @@
+{
+  "contract_version": 1,
+  "source_app": "synthetic-concert",
+  "source_module": "post",
+  "fetched_at": "2026-10-10T14:35:00Z",
+  "snapshot_revision": 3,
+  "records": [],
+  "tombstones": [
+    {
+      "source_app": "synthetic-concert",
+      "source_module": "post",
+      "source_record_id": "concert-recap-007",
+      "source_revision": 2,
+      "deleted_at": "2026-10-09T11:42:13Z",
+      "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "page": 1,
+  "page_size": 50,
+  "has_more": false
+}

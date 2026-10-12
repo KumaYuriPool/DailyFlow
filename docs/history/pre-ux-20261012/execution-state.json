@@ -1,0 +1,580 @@
+{
+  "schema_version": 1,
+  "updated_date": "2026-10-12",
+  "scope": "Implementation resumed: DF-01 takeover audit passed; DF-02/03/04/10 probes in progress under accumulated 2-hour cap",
+  "deadline_beijing": "2026-10-13T24:00:00+08:00",
+  "deadline_iso": "2026-10-14T00:00:00+08:00",
+  "freeze_target": "2026-10-12T12:00:00+08:00",
+  "submit_target": "2026-10-13T12:00:00+08:00",
+  "route": "B",
+  "capabilities": {
+    "system_delegation": "blocked_at_rc2_observed",
+    "cross_app_transport": "available_offline_only",
+    "local_image": "available",
+    "cross_app_media": "unknown",
+    "in_app_official_agent": "available",
+    "agent_path_in_app": "available"
+  },
+  "agent_path": "in_app_chat_only",
+  "active_task": "DF-22",
+  "next_action": "r5/r6/r7 regression (2026-10-12) done: fixed test-isolation leak that poisoned the canonical synthetic-source projection (rev-31 tombstone hid anchor record); canonical chain rebuilt clean; DF-07 validate evidence regenerated; timeline UI gained a source status bar (scope/snapshot-time/not-connected, SPEC §3 + DF-26 gate). r7 full re-run after all fixes: offline 11/11 + timeline-ui narrow/wide + business 7/7 + resync 13/13 + second-stages 15/15 + repro 31/31 all pass, canonical tree verified clean after the battery. Candidate: main.splash sha256 550f18f7, manifest blake3 3786f459, route-b zip sha256 be1d56ad (supersedes 2cc1f443/ea635a2a); hub check PASSED. DF-22/25 remain user-review gated.",
+  "tasks": [
+    {
+      "id": "DF-00",
+      "title": "文档基线与接力协议",
+      "dependencies": [],
+      "status": "passed",
+      "owner": null,
+      "run_id": "20261010-product-rewrite",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-00/20261010-product-rewrite/doc-validation.json",
+        "build/semifinal-202610/steps/DF-00/20261010-product-rewrite/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-01",
+      "title": "接管工作区与冻结保护基线",
+      "dependencies": [
+        "DF-00"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-takeover-audit",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-01/20261010-takeover-audit/baseline.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-02",
+      "title": "系统委派最小复现",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "passed_with_boundary",
+      "owner": "main-agent",
+      "run_id": "20261010-system-delegation-probe",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-02/system-delegation-probe/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-03",
+      "title": "第三方工具归属和授权传输探针",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "passed_with_boundary",
+      "owner": "main-agent",
+      "run_id": "20261010-third-party-owner-probe",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-03/third-party-owner-probe/handoff.md",
+        "build/semifinal-202610/source-bridge/contracts-r2/report.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-04",
+      "title": "图片展示与资源授权探针",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "passed_partial",
+      "owner": "main-agent",
+      "run_id": "20261010-image-resource-probe",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-04/image-resource-probe/handoff.md",
+        "build/semifinal-202610/steps/DF-04/image-resource-probe/desktop-current-20261010-2230.png"
+      ],
+      "blocker": "cross_app_media_unknown",
+      "resume_condition": null
+    },
+    {
+      "id": "DF-05",
+      "title": "冻结外部来源和组织结果契约",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-v1-contract",
+      "evidence": [
+        "docs/EXTERNAL_SOURCE_CONTRACT.md",
+        "experiments/source-bridge/fixtures/probes/identity.json",
+        "experiments/source-bridge/fixtures/probes/revision.json",
+        "experiments/source-bridge/fixtures/probes/tombstone.json",
+        "experiments/source-bridge/fixtures/probes/dedupe.json",
+        "tools/test_v1_contract.py",
+        "build/semifinal-202610/source-bridge/v1-contract/report.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-06",
+      "title": "两场景合成资料及独立预期",
+      "dependencies": [
+        "DF-05"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-scenario-hardening",
+      "evidence": [
+        "build/semifinal-202610/synthetic-source/climbing/page-01-posts.json (8 posts incl. malicious climb-post-900, distractor climb-post-901, ambiguity climb-post-902/903, future climb-post-904)",
+        "build/semifinal-202610/synthetic-source/concert/page-01-posts.json (6 posts incl. distractor, malicious concert-recap-905, future concert-recap-006)",
+        "build/semifinal-202610/scenarios/expected-climbing.json",
+        "build/semifinal-202610/scenarios/expected-concert.json",
+        "build/semifinal-202610/scenarios/media-license.md",
+        "tools/test_scenario_expectations.py",
+        "build/semifinal-202610/expectations/expectations-report.json (25/25)"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-07",
+      "title": "独立模拟社媒最小App",
+      "dependencies": [
+        "DF-05",
+        "DF-06"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-synthetic-source",
+      "evidence": [
+        "experiments/synthetic-source/producer.py",
+        "experiments/synthetic-source/importer.py",
+        "build/semifinal-202610/synthetic-source/climbing/page-{01,02,03}-*.json",
+        "build/semifinal-202610/synthetic-source/concert/page-{01,02,03}-*.json",
+        "build/semifinal-202610/synthetic-source/climbing-validate/report.json (regenerated 2026-10-12, 3/3 conform)",
+        "build/semifinal-202610/synthetic-source/concert-validate/report.json (regenerated 2026-10-12, 3/3 conform)",
+        "build/semifinal-202610/synthetic-source/climbing-validate/report.json (regenerated 2026-10-12, 3/3 conform; briefly missing after original run)",
+        "build/semifinal-202610/synthetic-source/concert-validate/report.json (regenerated 2026-10-12, 3/3 conform; briefly missing after original run)",
+        "build/semifinal-202610/synthetic-source/projection-climbing/sources.json",
+        "build/semifinal-202610/synthetic-source/projection-concert/sources.json",
+        "build/semifinal-202610/steps/DF-07/synthetic-source/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-08",
+      "title": "可信工具结果进入DailyFlow",
+      "dependencies": [
+        "DF-03",
+        "DF-05",
+        "DF-07"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-dailyflow-integration",
+      "evidence": [
+        "experiments/synthetic-source/dailyflow_query_v1.py",
+        "build/semifinal-202610/synthetic-source/query-climbing.json",
+        "build/semifinal-202610/synthetic-source/query-concert.json",
+        "build/semifinal-202610/steps/DF-08/dailyflow-integration/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-09",
+      "title": "确定性投影同步",
+      "dependencies": [
+        "DF-08"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-importer-hardening",
+      "evidence": [
+        "experiments/synthetic-source/importer.py (monotonic revs, conflict log, tombstone gate, path bounds)",
+        "tools/test_importer_adversarial.py (13/13 incl. audit F03/F04/F05 + out-of-order)",
+        "build/importer-adversarial-r1/adversarial-report.json",
+        "build/semifinal-202610/steps/DF-09/audit-hardening/handoff.md",
+        "build/semifinal-202610/steps/DF-09/audit-20261011-response/handoff.md",
+        "tools/test_importer_audit_r1.py (8/8 audit R1/R4 regression)",
+        "tools/sync_timeline_import.py (one-command full chain, R5)",
+        "build/semifinal-202610/independent-audit-r2-20261011/ACCEPTANCE_REVIEW.md (second audit)",
+        "tools/test_timeline_second_stages.py (13/13 three-stage B1/B2/B3)",
+        "build/second-stages-final8/report.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-10",
+      "title": "应用内Agent请求/取消/结果路径选择",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-in-app-agent-probe",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-10/in-app-agent-probe/handoff.md",
+        "build/module-routing-r1/real2",
+        "build/event-flow-r2/real-final2"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-11",
+      "title": "Agent选源与有依据的组织",
+      "dependencies": [
+        "DF-05",
+        "DF-06",
+        "DF-10"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-real-model-selection",
+      "evidence": [
+        "src/50_agent.splash (timeline_topic schema+context)",
+        "src/46_timeline.splash (topic filter)",
+        "tools/export_timeline_for_app.py (multi-scenario)",
+        "tools/test_timeline_model.py",
+        "build/timeline-model-newshell-r12/report.json (7/7)",
+        "build/timeline-model-newshell-r12/01-climb-ask.png",
+        "build/semifinal-202610/steps/DF-11/real-model-selection/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-12",
+      "title": "可见交互规格与状态矩阵",
+      "dependencies": [
+        "DF-00",
+        "DF-05"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-interaction-matrix",
+      "evidence": [
+        "docs/INTERACTION_MATRIX.md",
+        "build/semifinal-202610/steps/DF-12/interaction-matrix/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-13",
+      "title": "时间流UI与请求绑定",
+      "dependencies": [
+        "DF-11",
+        "DF-12"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-splash-timeline-ui",
+      "evidence": [
+        "src/46_timeline.splash",
+        "src/60_ui.splash",
+        "tools/export_timeline_for_app.py",
+        "tools/test_timeline_ui.py",
+        "bundle/main.splash (rebuilt, digest 0a4cbcae)",
+        "build/timeline-ui-r4/report.json",
+        "build/timeline-ui-r4-wide/report.json",
+        "build/semifinal-202610/steps/DF-13/splash-timeline-ui/handoff.md",
+        "build/regression-final/resync/report.json (read-only imported detail, R3)"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-14",
+      "title": "图文卡片资源接入",
+      "dependencies": [
+        "DF-04",
+        "DF-13"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-image-resources",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-14/media/climb-thumb-001.png",
+        "build/semifinal-202610/steps/DF-14/media/climb-thumb-002.png",
+        "build/semifinal-202610/steps/DF-14/media/climb-thumb-003.png",
+        "experiments/synthetic-source/media_resolver.py",
+        "build/semifinal-202610/steps/DF-14/time-flow-with-media.png",
+        "build/semifinal-202610/steps/DF-14/image-resources/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-15",
+      "title": "关联确认与排除",
+      "dependencies": [
+        "DF-13"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-decision-persistence",
+      "evidence": [
+        "experiments/synthetic-source/decision_store.py",
+        "tools/test_decision_persistence.py",
+        "build/semifinal-202610/decision-persistence/persistence-report.json (7/7)",
+        "build/semifinal-202610/steps/DF-15/relations/handoff.md",
+        "build/regression-final/resync/report.json (11/11: UI exclude persists across refresh, R2/R3/R5)",
+        "build/second-stages-final8/report.json (A-stage upstream exclusion consumed, B-stage composite isolation)"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-16",
+      "title": "两场景端到端与新鲜度验收",
+      "dependencies": [
+        "DF-13",
+        "DF-15"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-end-to-end-acceptance",
+      "evidence": [
+        "tools/test_route_b_end_to_end.py",
+        "tools/test_route_b_freshness.py",
+        "build/semifinal-202610/e2e/route-b/e2e-report.json",
+        "build/semifinal-202610/e2e/freshness/freshness-report.json",
+        "build/semifinal-202610/e2e/route-b/timeline-climbing-applied.json",
+        "build/semifinal-202610/e2e/route-b/timelines.html",
+        "build/semifinal-202610/e2e/route-b/preview.png",
+        "build/semifinal-202610/e2e/route-b/preview-with-media.png",
+        "build/semifinal-202610/steps/DF-16/end-to-end-acceptance/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-17",
+      "title": "权限、失败、重启与旧数据回归",
+      "dependencies": [
+        "DF-16"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-business-newhost-ui",
+      "evidence": [
+        "tools/test_business_flow_newhost.py",
+        "build/semifinal-202610/regression/business-newhost-ui-r6/report.json (7/7)",
+        "build/semifinal-202610/regression/business-newhost-ui-r6/01-ledger.png",
+        "build/semifinal-202610/e2e/resilience/resilience-report.json (6/6, offline)",
+        "build/semifinal-202610/steps/DF-17/newhost-business-regression/handoff.md",
+        "build/semifinal-202610/steps/DF-17/regression-20261011-r4/handoff.md (post-B-fix full offline re-pass + ledger drift notes)",
+        "build/semifinal-202610/steps/DF-17/regression-20261012-r5/handoff.md (round-1 + isolation-leak root cause + fixes F1-F5)",
+        "build/semifinal-202610/steps/DF-17/regression-20261012-r6/handoff.md (round-2: all suites pass incl. guards)",
+        "build/regression-20261012-r7/ (final confirmation round after all fixes: all suites pass, canonical tree clean post-battery)"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-18",
+      "title": "有界Shell平台修复分支",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-card-host-first-card-fix",
+      "evidence": [
+        "build/semifinal-202610/steps/DF-18/card-host-first-card-fix/card-host-first-card.patch",
+        "build/semifinal-202610/steps/DF-18/card-host-first-card-fix/handoff.md",
+        "build/timeline-ui-probe1/ (pre-fix refusal reproduction)",
+        "build/timeline-ui-r4/report.json (post-fix pass on production bundle)"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-19",
+      "title": "独立记账来源分支",
+      "dependencies": [
+        "DF-09",
+        "DF-16"
+      ],
+      "status": "deferred",
+      "owner": null,
+      "run_id": null,
+      "evidence": [],
+      "blocker": null,
+      "resume_condition": "after competition or explicit spare-time gate"
+    },
+    {
+      "id": "DF-20",
+      "title": "功能冻结与准确候选",
+      "dependencies": [],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261011-restamp",
+      "evidence": [
+        "bundle/manifest.json (restamped digest 3786f45906574d8909af430fccdb6ae807c84d8ad1ee86a6eb79733a9d301347, main.splash sha256 550f18f7e595be1f10979209f04133e81da24f88bfbad708b0b85ab0de294b9f; supersedes d1bb66e5/0a4cbcae after 2026-10-12 status-bar fix)",
+        "hub.exe (655114c) check bundle --allow-unsigned -> dailyflow 0.1.1 PASSED",
+        "build/timeline-ui-r5/report.json (post-stamp UI regression 16/16)",
+        "build/semifinal-202610/steps/DF-20/feature-freeze/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null,
+      "dependency_rule": "conditional_gates.DF-20",
+      "release_label": "route-b-2026-10-10"
+    },
+    {
+      "id": "DF-21",
+      "title": "发布准备与具体审核包",
+      "dependencies": [
+        "DF-20"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-package",
+      "evidence": [
+        "build/semifinal-202610/route-b-package/route-b-2026-10-10.zip",
+        "build/semifinal-202610/route-b-package/PACKAGE_README.md",
+        "sha256: be1d56ad32b41ae9f363183bfc03df25274049b866c5ad86f5575c53923b980a (zip rebuilt 2026-10-12 after r5/r6 regression fixes; supersedes 2cc1f443 and ea635a2a)"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-22",
+      "title": "授权后提交标签与发布",
+      "dependencies": [
+        "DF-21"
+      ],
+      "status": "ready_for_user_review",
+      "owner": null,
+      "run_id": null,
+      "evidence": [
+        "docs/APP_HUB_ISSUE_route_b_2026_10_10.md"
+      ],
+      "blocker": "user approval required before public push/Issue/Release",
+      "resume_condition": "user explicitly authorizes"
+    },
+    {
+      "id": "DF-23",
+      "title": "公开发布物独立安装验收",
+      "dependencies": [
+        "DF-22"
+      ],
+      "status": "passed_local",
+      "owner": "main-agent",
+      "run_id": "20261010-repro",
+      "evidence": [
+        "tools/test_route_b_package_repro.py",
+        "build/semifinal-202610/e2e/repro/repro-report.json",
+        "31 of 31 checks pass; zip integrity OK; re-verified 2026-10-12 on rebuilt zip sha256 be1d56ad (supersedes 2cc1f443/ea635a2a)"
+      ],
+      "blocker": "true cross-machine install verification not done within competition window",
+      "resume_condition": "post-competition spare-time gate"
+    },
+    {
+      "id": "DF-24",
+      "title": "最终演示与评语响应",
+      "dependencies": [
+        "DF-20"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-demo",
+      "evidence": [
+        "build/semifinal-202610/route-b-package/preview.png",
+        "build/semifinal-202610/route-b-package/preview-with-media.png",
+        "build/semifinal-202610/route-b-package/timelines.html",
+        "docs/APP_HUB_ISSUE_route_b_2026_10_10.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-25",
+      "title": "比赛提交与读回",
+      "dependencies": [
+        "DF-23",
+        "DF-24"
+      ],
+      "status": "ready_for_user_review",
+      "owner": null,
+      "run_id": null,
+      "evidence": [
+        "docs/APP_HUB_ISSUE_route_b_2026_10_10.md"
+      ],
+      "blocker": "requires user click on submit; not auto-executable",
+      "resume_condition": "user explicitly submits"
+    },
+    {
+      "id": "DF-26",
+      "title": "导入/协议备用路线",
+      "dependencies": [
+        "DF-05",
+        "DF-06"
+      ],
+      "status": "passed",
+      "owner": "main-agent",
+      "run_id": "20261010-route-b",
+      "evidence": [
+        "experiments/synthetic-source/importer.py (hardened)",
+        "experiments/synthetic-source/producer.py",
+        "tools/test_v1_contract.py",
+        "build/semifinal-202610/source-bridge/v1-contract/report.json",
+        "build/importer-adversarial-r1/adversarial-report.json",
+        "build/semifinal-202610/route-b-package/route-b-2026-10-10.zip"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "DF-27",
+      "title": "退回已验证核心的交付分支",
+      "dependencies": [
+        "DF-01"
+      ],
+      "status": "not_taken",
+      "owner": "main-agent",
+      "run_id": null,
+      "evidence": [
+        "decision recorded in docs/execution-state.json and SEMIFINAL_PLAN.md §三条交付路线"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    }
+  ],
+  "conditional_gates": {
+    "DF-08": "cross_app_transport=available; failed probe must be revalidated after DF-18",
+    "DF-11": "agent_path available AND ((route=A AND DF-09 passed) OR (route=B AND DF-26 passed))",
+    "DF-14": "media probe authorizes chosen resource path",
+    "DF-18": "one reproducible probe finding, maximum one platform fix during competition",
+    "DF-20": {
+      "any_of": [
+        {
+          "route": [
+            "A",
+            "B"
+          ],
+          "passed": [
+            "DF-17"
+          ]
+        },
+        {
+          "route": [
+            "C"
+          ],
+          "passed": [
+            "DF-27"
+          ]
+        }
+      ]
+    },
+    "DF-22": "concrete publication approval recorded",
+    "DF-25": "concrete submission approval and final materials correspond to DF-23",
+    "DF-26": "route=B documented",
+    "DF-27": "route=C documented"
+  }
+}

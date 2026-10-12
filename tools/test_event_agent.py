@@ -174,7 +174,7 @@ fn module_agent_tests(){
 }
 '''
 def run(out,binary=None):
-    d.configure(ROOT/'bundle',out,Path(binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe'))
+    d.configure(ROOT/'bundle',out,Path(binary or ROOT.parent/'OctoSense-App-Hub/target/release/card-host.exe'),legacy_vm_fixture=True)
     p=out/'bundle/main.splash';s=p.read_text(encoding='utf8').replace('host.request("model.complete",','test_model_request("model.complete",')
     s=s.replace('start_timeout(45,','start_timeout(0.1,')
     s=s.replace('if name == "dailyflow.query" { tools.resolve(token,business_query(a)) return }','if name == "dailyflow.query" { if business_optional(a,"record_id","") == "timeout-test" { event_timeout_test(token) return } if business_optional(a,"record_id","") == "speed-test" { tools.resolve(token,event_speed_context_tests()) return } if business_optional(a,"record_id","") == "edge-test" { tools.resolve(token,event_agent_edge_tests()) return } if business_optional(a,"record_id","") == "subject-test" { tools.resolve(token,event_subject_tests()) return } if business_optional(a,"record_id","") == "context-test" { tools.resolve(token,event_context_tests()) return } tools.resolve(token,event_agent_tests()) return }')
@@ -189,6 +189,7 @@ def run(out,binary=None):
     timeout=d.run('timer-injected',[d.query(record_id='timeout-test')]);assert data(timeout,0)['ok'],timeout
     modules=d.run('modules-injected',[dict(name='dailyflow.capabilities',args={})]);report['checks'].extend(data(modules,0)['checks'])
     report['real_timer_timeout_with_shortened_test_delay']=True
+    report['legacy_vm_fixture']=d.fixture_metadata()
     (out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8')
     assert all(c['pass'] for c in report['checks']),report
     print(json.dumps(report,ensure_ascii=False))

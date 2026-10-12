@@ -2,25 +2,56 @@
 All state, stamped manifests and logs stay in a freshly created output directory.
 """
 from pathlib import Path
-import json,subprocess,os,time,socket,urllib.request,shutil
+import json,subprocess,os,time,socket,urllib.request,shutil,hashlib
 from datetime import datetime,timezone,timedelta
 ROOT = None
 BIN = None
 DAY = datetime.now(timezone(timedelta(hours=8))).date().isoformat()
 FUTURE_DAY = (datetime.now(timezone(timedelta(hours=8))).date() + timedelta(days=5)).isoformat()
 
-def configure(bundle, output, binary):
-    """Create a new isolated output and copy the bundle before stamping it."""
+def configure(bundle, output, binary, *, legacy_vm_fixture=False):
+    """Copy into fresh output; explicitly labelled legacy fixtures may omit only
+    script-tools-v1 in that copy. Default preserves every manifest requirement.
+    This fixture mode never proves admission of the production package.
+    """
     global ROOT, BIN
     bundle, output, binary = bundle.resolve(), output.resolve(), binary.resolve()
     if not (bundle / 'manifest.json').is_file() or not binary.is_file():
         raise ValueError('Bundle manifest and card-host binary must exist.')
     if output == bundle or output.is_relative_to(bundle):
         raise ValueError('Output must be outside the source bundle.')
+    manifest_path = bundle / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text(encoding='utf8'))
+    requires = manifest.get('requires', [])
+    if legacy_vm_fixture and (not isinstance(requires, list) or any(r != 'script-tools-v1' for r in requires)):
+        raise ValueError('Legacy VM fixture may remove only script-tools-v1; unknown requirements are refused.')
     output.mkdir(parents=True, exist_ok=False)
     shutil.copytree(bundle, output / 'bundle')
+    if legacy_vm_fixture:
+        production = Path(__file__).resolve().parents[1] / 'bundle'
+        digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+        original_requires = list(requires)
+        manifest.pop('requires', None)
+        copied_manifest = output / 'bundle/manifest.json'
+        copied_manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
+        metadata = dict(legacy_vm_fixture=True,
+                        evidence_kind='isolated legacy VM business/injection fixture; not exact production admission',
+                        official_admission_evidence=False, production_bundle=str(production),
+                        production_manifest_sha256=digest(production/'manifest.json'),
+                        production_main_sha256=digest(production/'main.splash'),
+                        input_bundle=str(bundle), input_manifest_sha256=digest(manifest_path),
+                        source_main_sha256=digest(bundle/'main.splash'),
+                        original_requires=original_requires, fixture_requires=[],
+                        removed_requires=[r for r in original_requires if r == 'script-tools-v1'],
+                        fixture_manifest_sha256_before_stamp=digest(copied_manifest),
+                        note='Only the fresh copy is changed. The driver stamps that fixture, not the production bundle.')
+        (output/'fixture-manifest.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2),encoding='utf8')
     ROOT, BIN = output, binary
     return ROOT
+
+def fixture_metadata():
+    path = ROOT / 'fixture-manifest.json'
+    return json.loads(path.read_text(encoding='utf8')) if path.is_file() else None
 
 def save(rid='req1',**kw):
  a=dict(request_id=rid,record_id='',expected_revision=0,kind='expense',title='猫粮',date=DAY,amount='45',time='',end_date='',source='',flow_names=['宠物照护'],user_tags=['猫'])

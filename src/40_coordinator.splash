@@ -121,18 +121,25 @@ fn coordinator_apply(args,tracked){
     let saved_message = "已保存，日历、账本与事件已同步。" if a.kind == "period_entry" { saved_message = "经期记录已保存。" }
     return {"ok": true record_id: record_id flow_ids: ids message: saved_message replayed: false}
 }
-fn business_save(a){
-    let result = business_error("业务处理失败，结果未确认；请先查询原请求。")
-    // Preserve the 0.3.0 canonical receipt form without replaying its writes.
-    try {
-        if a.kind == "expense" {
-            let legacy_payload = {record_id: a.record_id expected_revision: a.expected_revision kind: a.kind title: a.title.trim() date: a.date amount: a.amount.trim() time: a.time end_date: a.end_date source: a.source.trim() flow_names: business_trim_list(a.flow_names) user_tags: business_trim_list(a.user_tags)}.to_json()
-            for receipt in business_optional(db,"receipts",[]) { if receipt.request_id == a.request_id && receipt.payload.parse_json().to_json() == legacy_payload.parse_json().to_json() {
-                return {"ok": true record_id: receipt.record_id flow_ids: receipt.flow_ids message: "旧请求已保存，没有重复写入。" replayed: true}
-            } }
+// Keep legacy receipt matching in its own frame. The old nested try/return path
+// can fail after a successful commit when all legacy fields are present.
+fn business_legacy_receipt(a){
+    if a.kind != "expense" { return nil }
+    let legacy_payload = {record_id: a.record_id expected_revision: a.expected_revision kind: a.kind title: a.title.trim() date: a.date amount: a.amount.trim() time: a.time end_date: a.end_date source: a.source.trim() flow_names: business_trim_list(a.flow_names) user_tags: business_trim_list(a.user_tags)}.to_json()
+    for receipt in business_optional(db,"receipts",[]) {
+        if receipt.request_id == a.request_id && receipt.payload.parse_json().to_json() == legacy_payload.parse_json().to_json() {
+            return {"ok": true record_id: receipt.record_id flow_ids: receipt.flow_ids message: "旧请求已保存，没有重复写入。" replayed: true}
         }
-    } catch { result = business_error("将按新契约校验。") }
-    try { result = coordinator_apply(a,true) } catch { result = business_error("业务校验异常，未确认保存。") } return result
+    }
+    return nil
+}
+fn business_save(a){
+    let previous = nil
+    try { previous = business_legacy_receipt(a) } catch { previous = nil }
+    if previous != nil { return previous }
+    let result = business_error("业务处理失败，结果未确认；请先查询原请求。")
+    try { result = coordinator_apply(a,true) } catch { result = business_error("业务校验异常，未确认保存。") }
+    return result
 }
 fn business_query(a){
     let records = [] let flows = flow_catalog(db) let total = 0 let limit = business_optional(a,"limit",50)
@@ -151,11 +158,37 @@ fn business_query(a){
     }
     return {"ok": true records: records flows: flows total: total truncated: total > records.len() message: "已查询"}
 }
-fn on_agent_tool(token,name,args_json){ business_tool_queue.push({token: token name: name args: args_json}) if business_tool_queue.len() == 1 { start_timeout(0.15, || business_drain_tools()) } }
-fn business_drain_tools(){ let pending = business_tool_queue business_tool_queue = [] for call in pending { business_dispatch_tool(call.token,call.name,call.args) } }
-fn business_dispatch_tool(token,name,args_json){
-    let tools = mod.app_tools try {
+// RC2 app_tools.dispatch@1: the host owns the call identity and request.
+// Keep the legacy entry for the existing local runtime and regression driver.
+fn on_agent_tool(token,name,args_json){ business_tool_queue.push({token: token name: name args: args_json official: false}) if business_tool_queue.len() == 1 { start_timeout(0.15, || business_drain_tools()) } }
+fn app_tool(name,call_id){ business_tool_queue.push({token: call_id name: name official: true}) if business_tool_queue.len() == 1 { start_timeout(0.15, || business_drain_tools()) } }
+fn business_drain_tools(){
+    let pending = business_tool_queue business_tool_queue = []
+    for call in pending {
+        if call.official { business_dispatch_official_tool(call.token,call.name) }
+        else { business_dispatch_tool(call.token,call.name,call.args) }
+    }
+}
+fn business_dispatch_official_tool(call_id,name){
+    // Cancellation/expiry while queued must not start a business operation.
+    if !mod.app_tools.active(call_id) { return }
+    try {
+        let request = mod.app_tools.request(call_id)
+        if request == nil { mod.app_tools.fail(call_id,"宿主请求已失效，未执行。") return }
+        let reply = {
+            resolve: fn(token,result){ return mod.app_tools.complete(token,result) }
+            reject: fn(token,error){ return mod.app_tools.fail(token,error) }
+        }
+        business_dispatch_tool_using(call_id,name,request.args.to_json(),reply)
+    } catch { mod.app_tools.fail(call_id,"宿主工具桥接失败，请查询当前状态。") }
+}
+fn business_dispatch_tool(token,name,args_json){ business_dispatch_tool_using(token,name,args_json,mod.app_tools) }
+fn business_dispatch_tool_using(token,name,args_json,tools){
+    try {
         let a = args_json.parse_json()
+        if name == "dailyflow.experience_context" { tools.resolve(token,ex_peer_context(a)) return }
+        if name == "dailyflow.experience_result" { tools.resolve(token,ex_peer_result(a)) return }
+        if ex_peer_pending { tools.reject(token,"当前是限定经历上下文的只读任务，请仅调用 dailyflow.experience_context 和 dailyflow.experience_result。") return }
         if name == "dailyflow.recall" { tools.resolve(token,recall_query(a)) return }
         if name == "dailyflow.timeline_query" { tools.resolve(token,timeline_query(a)) return }
         if name == "dailyflow.query" { tools.resolve(token,business_query(a)) return }

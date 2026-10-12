@@ -1,0 +1,109 @@
+{
+  "provenance": {
+    "kind": "actual historical 0.3.0 Splash bundle generated synthetic state on existing local card-host",
+    "source_bundle": "build/event-flow-r2/baseline/bundle",
+    "main_sha256": "d73ee4df1cd0c9c4fbc8d29626e8c9ef053d78967a7455ba77a6f76ee7d1d353",
+    "manifest": {
+      "agent": {
+        "instructions": "AGENT.md",
+        "model": {
+          "needs": [
+            "tool_calling",
+            "multilingual"
+          ]
+        },
+        "profile": "workspace-write",
+        "tools": []
+      },
+      "capabilities": [
+        "storage",
+        "model"
+      ],
+      "id": "dailyflow",
+      "integrity": {
+        "bundle_blake3": "6aa7a14d55d23e019ce153c9128fb11852cfdd4669e38416f47b1489bd2273a2"
+      },
+      "name": "DailyFlow",
+      "schema": 1,
+      "storage": {
+        "agent_workspace": "none"
+      },
+      "version": "0.3.0"
+    },
+    "official_host": false
+  },
+  "request": {
+    "name": "dailyflow.save_record",
+    "args": {
+      "request_id": "old-receipt-compat",
+      "record_id": "",
+      "expected_revision": 0,
+      "kind": "expense",
+      "title": "合成历史费用",
+      "date": "2026-10-10",
+      "amount": "10",
+      "time": "",
+      "end_date": "",
+      "source": "",
+      "flow_names": [
+        "合成旧事件"
+      ],
+      "user_tags": [
+        "猫"
+      ]
+    }
+  },
+  "state": {
+    "schema_version": 1,
+    "revision": 2,
+    "seq": 2,
+    "records": [
+      {
+        "id": "r1",
+        "kind": "expense",
+        "revision": 1,
+        "title": "合成历史费用",
+        "date": "2026-10-10",
+        "end_date": "",
+        "cents": 1000,
+        "source": "",
+        "due_at": 0,
+        "completed_at": 0,
+        "reminded_due": 0,
+        "status": "recorded",
+        "created_at": 1791564455.654186,
+        "updated_at": 1791564455.6541967,
+        "flow_ids": [
+          "f2"
+        ],
+        "user_tags": [
+          "猫"
+        ]
+      }
+    ],
+    "flows": [
+      {
+        "id": "f2",
+        "name": "合成旧事件",
+        "hidden": false,
+        "created_at": 1791564455.6541939
+      }
+    ],
+    "alerts": [],
+    "budget_cents": 0,
+    "budget_month": "2026-10",
+    "budget_notified": false,
+    "period_enabled": false,
+    "private_hidden": true,
+    "receipts": [
+      {
+        "request_id": "old-receipt-compat",
+        "payload": "{\"record_id\":\"\",\"expected_revision\":0,\"kind\":\"expense\",\"title\":\"合成历史费用\",\"date\":\"2026-10-10\",\"amount\":\"10\",\"time\":\"\",\"end_date\":\"\",\"source\":\"\",\"flow_names\":[\"合成旧事件\"],\"user_tags\":[\"猫\"]}",
+        "record_id": "r1",
+        "flow_ids": [
+          "f2"
+        ]
+      }
+    ]
+  }
+}

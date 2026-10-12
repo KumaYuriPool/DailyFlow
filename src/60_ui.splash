@@ -37,6 +37,9 @@ fn resume_workspace(){ if screen == "home" { go("calendar") } else { workspace_o
 fn expand_workspace(){ workspace_expanded = !workspace_expanded render_layout() }
 fn focus_conversation(){ workspace_expanded = false if !layout_wide { workspace_open = false } render_layout() ui.navigation.render() }
 fn render_screen(){
+    ui.legacy_shell.set_visible(!experience_mode)
+    ui.experience_shell.set_visible(experience_mode)
+    if experience_mode { ex_redraw() }
     render_layout()
     // Keep help in its own full-height slot: rendering a previous source page
     // must never leave it sharing vertical space with the guide.
@@ -46,6 +49,7 @@ fn render_screen(){
     ui.ledger_page.set_visible(screen == "ledger")
     ui.period_page.set_visible(screen == "period")
     ui.recall_page.set_visible(screen == "recall")
+    ui.timeline_page.set_visible(screen == "timeline")
     ui.graph_page.set_visible(screen == "graph")
     ui.detail_page.set_visible(screen == "detail")
     ui.edit_page.set_visible(screen == "edit")
@@ -53,6 +57,7 @@ fn render_screen(){
     ui.help_page.set_visible(screen == "help")
     ui.home_page.render()
     if screen == "recall" { recall_refresh() }
+    if screen == "timeline" { timeline_load() timeline_decisions_load() ui.timeline_results.render() }
     if screen == "picker" { ui.picker_results.render() }
     if screen == "calendar" { ui.calendar_page.render() }
     if screen == "ledger" { ui.ledger_page.render() }
@@ -102,6 +107,7 @@ fn input_scope(){ if active_flow == "" { return "全部事件" } return flow_nam
 fn workspace_title(){
     if screen == "help" { return "使用说明" }
     if screen == "recall" { return "找记录" }
+    if screen == "timeline" { return "时间流" }
     if screen == "period" { return "经期记录" } if screen == "calendar" { return "日历" } if screen == "ledger" { return "账本" }
     if screen == "graph" { return "事件关系" } if screen == "home" { return input_scope() }
     if screen == "detail" { return "源记录" } if screen == "edit" { return "编辑记录" }
@@ -171,11 +177,14 @@ fn calendar_item_label(e){
 }
 fn context_text(){ let prefix = "补记 · " if context_date == today() { prefix = "今天 · " } return prefix + context_date + " · " + input_scope() }
 start_timeout(0.08,|| boot())
-SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xffffff
+View{width: Fill height: Fill flow: Down
+legacy_shell := SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xffffff
     SolidView{width: 52 height: Fill flow: Down padding: 4 spacing: 10 draw_bg.color: #xf4f5f1
         Label{width: Fill text: "DF" draw_text.color: accent draw_text.text_style.font_size: 18}
+        ButtonFlat{width: Fill height: 38 text: "经历" on_click: || ex_enter()}
         ButtonFlat{width: Fill height: 44 text: "对话" on_click: || workspace("home")}
         ButtonFlat{width: Fill height: 44 text: "查找" on_click: || workspace("recall")}
+        ButtonFlat{width: Fill height: 44 text: "时间流" on_click: || workspace("timeline")}
         ButtonFlat{width: Fill height: 44 text: "日历" on_click: || workspace("calendar")}
         ButtonFlat{width: Fill height: 44 text: "账本" on_click: || workspace("ledger")}
         ButtonFlat{width: Fill height: 44 text: "全部" on_click: || picker("apps")}
@@ -288,6 +297,60 @@ SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xfffff
                                 if recall_offset > 0 { ButtonFlat{width: Fill text: "上一页" on_click: || { recall_offset -= 20 recall_refresh() }} }
                                 if recall_result.has_more { ButtonFlat{width: Fill text: "下一页" on_click: || { recall_offset = recall_result.next_offset recall_refresh() }} }
                             } }
+                        }
+                    }
+                }
+            }}
+        }
+        timeline_page := View{width: Fill height: Fill flow: Down spacing: 8 visible: false
+            View{width: Fill height: Fit flow: Right spacing: 6
+                Label{width: Fill text: "导入时间流" draw_text.color: ink draw_text.text_style.font_size: 20}
+                ButtonFlat{width: 60 height: 34 text: "刷新" on_click: || { timeline_load() timeline_decisions_load() ui.timeline_results.render() }}
+            }
+            timeline_results := ScrollYView{width: Fill height: Fill flow: Down spacing: 8 on_render: || {
+                if timeline_error != "" { Label{width: Fill text: timeline_error draw_text.color: muted} }
+                else if timeline_data != nil {
+                    if timeline_topic_filter != "" { Label{width: Fill text: "主题 · " + timeline_topic_filter + "（由模型从目录中选择）" draw_text.color: accent draw_text.text_style.font_size: 11} }
+                    Label{width: Fill text: timeline_summary_line() draw_text.color: ink}
+                    Label{width: Fill text: timeline_source_status_line() draw_text.color: muted draw_text.text_style.font_size: 10}
+                    if timeline_data.adoption_layer != "" { Label{width: Fill text: "来源方式：" + timeline_data.adoption_layer draw_text.color: muted draw_text.text_style.font_size: 10} }
+                    // R3: read-only imported detail, kept inside this view.
+                    if timeline_has_detail() {
+                        ButtonFlat{width: 110 height: 30 text: "‹ 返回列表" on_click: || timeline_close_detail()}
+                        let d = timeline_detail_record()
+                        if d == nil {
+                            // B3: source deleted/re-imported away — the detail
+                            // lapses explicitly, old content is never shown.
+                            Label{width: Fill text: "导入记录详情（已失效）" draw_text.color: accent draw_text.text_style.font_size: 14}
+                            Label{width: Fill text: "该记录已不在当前导入文件中（源删除或尚未重新同步）。" draw_text.color: muted}
+                        }
+                        if d != nil {
+                            Label{width: Fill text: "导入记录详情（只读）" draw_text.color: accent draw_text.text_style.font_size: 14}
+                            Label{width: Fill text: "" + d.title draw_text.color: ink draw_text.text_style.font_size: 15}
+                            Label{width: Fill text: "" + timeline_source_line(d) draw_text.color: muted draw_text.text_style.font_size: 11}
+                            Label{width: Fill text: "来源身份：" + d.source_app + " / " + d.record_id + " · rev " + d.revision draw_text.color: muted draw_text.text_style.font_size: 11}
+                            if d.date != "" { Label{width: Fill text: "时间：" + d.date draw_text.color: ink draw_text.text_style.font_size: 12} }
+                            if d.body != "" { Label{width: Fill text: "配文：" + d.body draw_text.color: ink draw_text.text_style.font_size: 12} }
+                            if d.citation != "" { Label{width: Fill text: "引用来源查询：" + d.citation draw_text.color: muted draw_text.text_style.font_size: 11} }
+                            if d.suspicious || d.future { Label{width: Fill text: timeline_flags(d) draw_text.color: #x8a6d00 draw_text.text_style.font_size: 11} }
+                        }
+                    }
+                    else {
+                        for r in timeline_records_visible() {
+                            View{width: Fill height: Fit flow: Down spacing: 1
+                                Label{width: Fill text: "│  " + r.date draw_text.color: muted draw_text.text_style.font_size: 11}
+                                Label{width: Fill height: 40 text: timeline_record_line(r) draw_text.color: ink draw_text.text_style.font_size: 13 draw_text.text_overflow: Ellipsis draw_text.max_lines: 1}
+                                Label{width: Fill text: timeline_source_line(r) draw_text.color: muted draw_text.text_style.font_size: 10}
+                                if r.suspicious || r.future { Label{width: Fill text: timeline_flags(r) draw_text.color: #x8a6d00 draw_text.text_style.font_size: 10} }
+                                View{width: Fill height: 30 flow: Right spacing: 5
+                                    ButtonFlat{width: 70 height: 28 text: "详情" on_click: || timeline_open_detail(r.source_app, r.record_id)}
+                                    ButtonFlat{width: 84 height: 28 text: "排除" on_click: || timeline_exclude(r.source_app, r.record_id)}
+                                }
+                            }
+                        }
+                        if timeline_gaps_scoped().len() > 0 {
+                            Label{width: Fill text: "尚未覆盖" draw_text.color: #x8a6d00 draw_text.text_style.font_size: 12}
+                            for g in timeline_gaps_scoped() { Label{width: Fill text: "· " + timeline_gap_line(g) draw_text.color: #x8a6d00 draw_text.text_style.font_size: 10} }
                         }
                     }
                 }

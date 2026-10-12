@@ -1,0 +1,46 @@
+{
+  "contract_version": 1,
+  "sources": [
+    {
+      "source_app": "synthetic-climbing",
+      "label": "攀岩社媒",
+      "modules": ["post", "image"],
+      "topics": ["bouldering", "first-visit", "log", "milestone"],
+      "default_window_days": 90,
+      "permission": "syn (allow-list)"
+    },
+    {
+      "source_app": "synthetic-calendar",
+      "label": "日历(合成)",
+      "modules": ["event_fact", "event_plan"],
+      "topics": ["bouldering", "concert"],
+      "default_window_days": 180,
+      "permission": "syn (allow-list)"
+    },
+    {
+      "source_app": "synthetic-expense",
+      "label": "账目(合成)",
+      "modules": ["expense"],
+      "topics": ["bouldering", "concert"],
+      "default_window_days": 365,
+      "permission": "syn (allow-list)"
+    },
+    {
+      "source_app": "synthetic-concert",
+      "label": "演出社媒",
+      "modules": ["post"],
+      "topics": ["concert", "after-show", "announcement"],
+      "default_window_days": 60,
+      "permission": "syn (allow-list)"
+    }
+  ],
+  "cross_source_alias": {
+    "攀岩": "bouldering",
+    "抱石": "bouldering",
+    "bouldering": "bouldering",
+    "演出": "concert",
+    "concert": "concert",
+    "音乐会": "concert"
+  },
+  "clarification_triggers": ["这个", "那个", "那件事", "再买", "再约"]
+}

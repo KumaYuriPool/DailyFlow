@@ -1,5 +1,7 @@
 # DailyFlow 产品策划案
 
+> 2026-10-09：历史策划归档。当前产品定义以[PRODUCT_SPEC](PRODUCT_SPEC.md)为准，阶段与本次安排见[PRODUCT_ROADMAP](PRODUCT_ROADMAP.md)和[SEMIFINAL_PLAN](SEMIFINAL_PLAN.md)。下文旧“最新规划”、需求与授权均记录当时状态，不覆盖新定位或完成度。
+
 ## 2026-10-03：最新规划优先
 
 下一轮按 [PET_CARE_FLOW_REPLAN](PET_CARE_FLOW_REPLAN.md) 收敛。恢复普通/账本日历切换的明确目标；单App严格模块边界，宠物护理为事件，Agent自动组织事件关系。旧多模块、四bundle与后续扩展表不再作为本轮需求，不保留产品占位。本文为历史设计依据。

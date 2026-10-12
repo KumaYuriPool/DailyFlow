@@ -3,7 +3,10 @@
     [string]$DataDir = '',
     [string]$CoreDir = '',
     [string]$Binary = '',
+    [string]$KernelBinary = '',
+    [string]$HubBinary = '',
     [string]$Bundle = '',
+    [switch]$WarmCardRunner,
     [switch]$Hidden,
     [int]$TestRemotePort = 0
 )
@@ -31,6 +34,9 @@ $taskArguments = @('-X', 'utf8', (Join-Path $PSScriptRoot 'tools\launch_desktop_
 if ($DataDir) { $taskArguments += @('--data-dir', $DataDir) }
 if ($CoreDir) { $taskArguments += @('--core-dir', $CoreDir) }
 if ($Binary) { $taskArguments += @('--binary', $Binary) }
+if ($KernelBinary) { $taskArguments += @('--kernel-binary', $KernelBinary) }
+if ($HubBinary) { $taskArguments += @('--hub-binary', $HubBinary) }
+if ($WarmCardRunner) { $taskArguments += '--warm-card-runner' }
 if ($Bundle) { $taskArguments += @('--bundle', $Bundle) }
 if ($Hidden) { $taskArguments += '--hidden' }
 if ($TestRemotePort) { $taskArguments += @('--test-remote-port', "$TestRemotePort") }

@@ -1,0 +1,65 @@
+{
+  "checks": [
+    {
+      "name": "initial detail",
+      "ok": true
+    },
+    {
+      "name": "confirm",
+      "ok": true
+    },
+    {
+      "name": "undo confirmation",
+      "ok": true
+    },
+    {
+      "name": "exclusion hidden",
+      "ok": true
+    },
+    {
+      "name": "exclusion survives reload",
+      "ok": true
+    },
+    {
+      "name": "restored",
+      "ok": true
+    },
+    {
+      "name": "amount changed",
+      "ok": true
+    },
+    {
+      "name": "sum calculation",
+      "ok": true
+    },
+    {
+      "name": "story switch",
+      "ok": true
+    },
+    {
+      "name": "source toggle",
+      "ok": true
+    },
+    {
+      "name": "new experience",
+      "ok": true
+    },
+    {
+      "name": "cancel does not reopen",
+      "ok": true
+    },
+    {
+      "name": "mobile no horizontal overflow",
+      "ok": true
+    },
+    {
+      "name": "mobile navigation",
+      "ok": true
+    },
+    {
+      "name": "no JS errors",
+      "ok": true
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,202 @@
+// 46_timeline: read-only imported-source timeline view (route=B).
+// The exporter writes timeline-imported.json (organized records + gaps + topic)
+// into the app data jail; this module reads and renders it. It never writes
+// business state, never executes record bodies, and shows safety flags.
+let timeline_data = nil
+let timeline_error = ""
+let timeline_file = "timeline-imported.json"
+fn timeline_kind_label(k){
+    if k == "post" { return "动态" }
+    if k == "expense" { return "支出" }
+    if k == "event_fact" { return "已发生" }
+    if k == "event_plan" { return "计划" }
+    if k == "image" { return "图片" }
+    if k == "media_link" { return "链接" }
+    return k
+}
+fn timeline_money(cents){
+    if cents < 0 { return "" }
+    return "¥" + money(cents)
+}
+fn timeline_record_line(r){
+    let text = r.title
+    let amt = timeline_money(r.amount_minor)
+    if amt != "" { text += " " + amt }
+    return text
+}
+fn timeline_source_line(r){
+    let text = r.source_app + " · " + timeline_kind_label(r.kind)
+    if r.revision > 0 { text += " · rev" + r.revision }
+    return text
+}
+fn timeline_flags(r){
+    let text = ""
+    if r.suspicious { text += "⚠ 配文含指令样文本，仅展示不执行 " }
+    if r.future { text += "未来计划，不计入已发生费用" }
+    return text
+}
+fn timeline_load(){
+    timeline_error = ""
+    let data = read_json(timeline_file)
+    if data == nil {
+        if fs.exists(timeline_file) { timeline_error = "时间流文件格式无效。" }
+        else { timeline_error = "尚未导入时间流样本；先用导出脚本生成 timeline-imported.json。" }
+        timeline_data = nil
+        return
+    }
+    if data.records == nil { timeline_error = "时间流文件缺少 records。" timeline_data = nil return }
+    timeline_data = data
+}
+fn timeline_summary_line(){
+    if timeline_data == nil { return "" }
+    let vis = timeline_records_visible()
+    let s = ""
+    if timeline_topic_filter != "" { s = timeline_topic_filter } else { s = timeline_data.topic }
+    s += " · " + vis.len() + " 条 · 按时间排列"
+    let ex = timeline_excluded_count()
+    if ex > 0 { s += " · 已排除 " + ex + " 条" }
+    return s
+}
+fn timeline_gap_line(g){ return g.kind + "：" + g.detail }
+
+// Source status bar (PRODUCT_SPEC §3 / DF-26): scope, snapshot time, honesty.
+fn timeline_source_status_line(){
+    if timeline_data == nil { return "" }
+    let text = "来源范围："
+    let first = true
+    if timeline_data.sources.is_array() {
+        for s in timeline_data.sources {
+            if !first { text += " · " }
+            text += s.source_app + "（" + s.records + "）"
+            first = false
+        }
+    }
+    let gen = timeline_data.generated_at
+    if gen != nil {
+        let parts = ("" + gen).split("T")
+        let stamp = parts[0]
+        if parts.len() > 1 { stamp += " " + parts[1].split(".")[0] }
+        text += "｜导入快照 " + stamp + " UTC"
+    }
+    text += "｜文件导入样本，未连接实时来源"
+    return text
+}
+
+// Model-driven topic selection (DF-11): the model picks an exact topic id
+// from the catalog below; the app validates and renders read-only.
+let timeline_topic_filter = ""
+fn timeline_ids_contains(ids, v){
+    for x in ids { if x == v { return true } }
+    return false
+}
+fn timeline_topics(){
+    let ids = [] if timeline_data == nil { return ids }
+    if timeline_data.topics.is_array() {
+        for t in timeline_data.topics { if t != "" && !timeline_ids_contains(ids, t) { ids.push(t) } }
+    }
+    if timeline_data.topic != "" && !timeline_ids_contains(ids, timeline_data.topic) { ids.push(timeline_data.topic) }
+    return ids
+}
+fn timeline_valid_topic(t){
+    if t == "" { return false }
+    for id in timeline_topics() { if id == t { return true } }
+    return false
+}
+fn timeline_open_topic(t){
+    timeline_load()
+    if !timeline_valid_topic(t) { message = "该主题不在已导入的时间流目录中。" redraw() return }
+    timeline_topic_filter = t
+    go("timeline")
+}
+fn timeline_records_filtered(){
+    let out = [] if timeline_data == nil { return out }
+    for r in timeline_data.records {
+        if timeline_topic_filter == "" { out.push(r) }
+        else {
+            let hit = r.topic == timeline_topic_filter
+            if !hit { for tag in business_optional(r,"tags",[]) { if tag == timeline_topic_filter { hit = true } } }
+            if hit { out.push(r) }
+        }
+    }
+    return out
+}
+
+
+// ---- R2: user exclusions persist in the app jail and survive refresh ----
+let timeline_decisions_file = "timeline-decisions.json"
+let timeline_decisions = nil
+fn timeline_decisions_load(){
+    let data = read_json(timeline_decisions_file)
+    timeline_decisions = data
+}
+fn timeline_exclusion_key(src, rid){
+    return src + "/" + rid
+}
+fn timeline_is_excluded(src, rid){
+    // B1: effective exclusion = the user's local decision OR the upstream
+    // marker carried by the export ("excluded": true from applied decisions).
+    let key = timeline_exclusion_key(src, rid)
+    if timeline_decisions == nil { return false }
+    if timeline_decisions.excluded.is_array() {
+        // v2 store entries are plain "source_app/record_id" strings; string
+        // values have no is_object() method in Splash, so an object-compat
+        // branch here would break the whole render (unknown-method error).
+        for x in timeline_decisions.excluded {
+            if x == key { return true }
+        }
+    }
+    return false
+}
+fn timeline_record_excluded(r){
+    if r.excluded { return true }
+    return timeline_is_excluded(r.source_app, r.record_id)
+}
+fn timeline_exclude(src, rid){
+    if rid == "" { return }
+    timeline_decisions_load()
+    let list = []
+    if timeline_decisions != nil && timeline_decisions.excluded.is_array() {
+        for x in timeline_decisions.excluded { list.push(x) }
+    }
+    let key = timeline_exclusion_key(src, rid)
+    if !timeline_ids_contains(list, key) { list.push(key) }
+    let doc = ("{\"schema\":2,\"excluded\":" + list.to_json() + "}").parse_json()
+    try { fs.write(timeline_decisions_file, doc.to_json()) } catch { message = "排除状态保存失败。" redraw() return }
+    timeline_decisions = doc
+    ui.timeline_results.render()
+}
+// ---- R3: read-only imported detail (never routed to the business ledger) ----
+let timeline_detail_key = ""
+fn timeline_open_detail(src, rid){ timeline_detail_key = timeline_exclusion_key(src, rid) redraw() }
+fn timeline_close_detail(){ timeline_detail_key = "" redraw() }
+fn timeline_has_detail(){
+    if timeline_detail_key == "" { return false }
+    return true
+}
+fn timeline_detail_record(){
+    if timeline_detail_key == "" { return nil }
+    if timeline_data == nil { return nil }
+    for r in timeline_data.records {
+        if timeline_exclusion_key(r.source_app, r.record_id) == timeline_detail_key { return r }
+    }
+    return nil
+}
+// ---- R6: topic-scoped visibility and gaps ----
+fn timeline_records_visible(){
+    let out = []
+    for r in timeline_records_filtered() { if !timeline_record_excluded(r) { out.push(r) } }
+    return out
+}
+fn timeline_excluded_count(){
+    let n = 0
+    for r in timeline_records_filtered() { if timeline_record_excluded(r) { n += 1 } }
+    return n
+}
+fn timeline_gaps_scoped(){
+    let out = [] if timeline_data == nil { return out }
+    for g in timeline_data.gaps {
+        if timeline_topic_filter == "" { out.push(g) }
+        else { if g.topic == timeline_topic_filter { out.push(g) } }
+    }
+    return out
+}
