@@ -8,21 +8,36 @@
       ]
     },
     "profile": "workspace-write",
-    "tools": []
+    "tools": [
+      "dailyflowledger.capabilities",
+      "dailyflowledger.read_events"
+    ]
   },
   "capabilities": [
     "storage",
     "model",
     "octos.turn.start",
-    "octos.turn.interrupt"
+    "octos.turn.interrupt",
+    "app_tools"
   ],
+  "host_api": {
+    "required": {
+      "app_tools.cancel": 1,
+      "app_tools.dispatch": 1,
+      "app_tools.focus": 1,
+      "app_tools.read": 1,
+      "app_tools.watch_authorization": 1
+    }
+  },
   "id": "dailyflow",
   "integrity": {
-    "bundle_blake3": "79f5eed0c4f5eb9363df375767d46e85ceba3b2a1cbee995620fb7edbbd42a48"
+    "bundle_blake3": "530ca299764d16c0ada99b0f84e38a6b2805051b4d55a1ce519ead2e29a7c43d"
   },
   "name": "DailyFlow",
   "requires": [
-    "script-tools-v1"
+    "script-tools-v1",
+    "host-api-v1",
+    "cross-app-read-v1"
   ],
   "schema": 1,
   "storage": {

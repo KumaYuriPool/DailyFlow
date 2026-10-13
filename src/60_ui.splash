@@ -26,7 +26,7 @@ fn on_app_resize(width,height){
     if width <= 0 || height <= 0 { return }
     viewport_width = width
     let wide = width >= 960
-    if wide != layout_wide { layout_wide = wide if loaded { render_layout() ui.navigation.render() } }
+    if wide != layout_wide { layout_wide = wide if loaded { render_layout() ui.navigation.render() ex_redraw() } }
 }
 fn toggle_layout(){
     if !layout_wide && viewport_width > 0 && viewport_width < 960 { message = "拉宽应用窗口后即可并排查看。" ui.status.set_text(message) return }
@@ -176,7 +176,7 @@ fn calendar_item_label(e){
     } return label
 }
 fn context_text(){ let prefix = "补记 · " if context_date == today() { prefix = "今天 · " } return prefix + context_date + " · " + input_scope() }
-start_timeout(0.08,|| boot())
+start_timeout(0.08,|| { boot() nf_external_activate_pending() })
 View{width: Fill height: Fill flow: Down
 legacy_shell := SolidView{width: Fill height: Fill flow: Right spacing: 0 draw_bg.color: #xffffff
     SolidView{width: 52 height: Fill flow: Down padding: 4 spacing: 10 draw_bg.color: #xf4f5f1

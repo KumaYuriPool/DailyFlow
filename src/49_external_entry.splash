@@ -1,0 +1,451 @@
+// H: external request journal and local selection adapter.
+// Binding is host context, never model args. Baseline ABI has no origin_turn_id:
+// nf_external_host_call therefore fails closed until a verified host upgrade.
+let nf_ext = nil
+let nf_ext_error = false
+let nf_ext_active = ""
+let nf_ext_opening = nil
+fn nf_ext_ok(data){ return {"ok": true data: data error: nil} }
+fn nf_ext_fail(code,id){ return {"ok": false data: nil error: {code: code message: code retryable: false request_id: id source_app: "dailyflow"}} }
+fn nf_ext_terminal(state){ return state == "completed" || state == "failed" || state == "cancelled" || state == "timed_out" }
+fn nf_ext_find(id){ if nf_ext == nil { return nil } for r in nf_ext.requests { if r.request_id == id { return r } } return nil }
+fn nf_ext_item(id){ ex_load() for it in ex_store.items { if it.id == id { return it } } return nil }
+fn nf_ext_data(r){ return {request_id: r.request_id experience_id: r.experience_id origin_turn_id: r.origin_turn_id worker_turn_ids: r.worker_turn_ids generation: r.generation state: r.state error: r.error} }
+fn nf_ext_commit(c){
+    if nf_ext_error { return false }
+    let before = nf_ext.to_json()
+    if !write_checked("external-requests-v1.backup.json",before) { return false }
+    if !write_checked("external-requests-v1.json",c.to_json()) {
+        if !write_checked("external-requests-v1.json",before) { nf_ext_error = true }
+        return false
+    }
+    nf_ext = c return true
+}
+fn nf_ext_valid(v){
+    if v.version != 1 || !v.requests.is_array() || v.requests.len() > 128 { return false }
+    let ids = []
+    for r in v.requests {
+        if !r.request_id.is_string() || r.request_id.len() < 1 || r.request_id.len() > 128 || timeline_ids_contains(ids,r.request_id) { return false }
+        ids.push(r.request_id)
+        if !r.experience_id.is_string() || r.generation != 1 || !r.worker_turn_ids.is_array() || !r.sources.is_array() || !r.question.is_string() || !r.caller_app.is_string() || !r.account.is_string() || !r.origin_turn_id.is_string() || !r.fingerprint.is_string() || r.reserved_seq < 0 { return false }
+        if !nf_ext_terminal(r.state) && r.state != "accepted" && r.state != "reading" && r.state != "organizing" && r.state != "persisting" { return false }
+        if r.pending_open != nil {
+            if r.state != "completed" || r.pending_open.request_id != r.request_id || r.pending_open.experience_id != r.experience_id || r.pending_open.generation != r.generation { return false }
+        }
+    }
+    return true
+}
+fn nf_ext_load(){
+    if nf_ext != nil { return }
+    ex_load() nf_ext = read_json("external-requests-v1.json")
+    if nf_ext == nil {
+        if fs.exists("external-requests-v1.json") { nf_ext_error = true }
+        nf_ext = {version: 1 requests: []} return
+    }
+    let valid = false try { valid = nf_ext_valid(nf_ext) } catch { valid = false }
+    if !valid { nf_ext_error = true nf_ext = {version: 1 requests: []} return }
+    // Never restart an old turn. Only a durable matching result marker recovers
+    // the persisting -> completed crash window. Existing IDs are not reused.
+    let c = nf_ext.to_json().parse_json() let changed = false
+    let seq = ex_store.seq
+    for r in c.requests {
+        seq = max(seq,r.reserved_seq)
+        if !nf_ext_terminal(r.state) {
+            let it = nf_ext_item(r.experience_id)
+            let done = false
+            if it != nil { done = business_optional(it,"external_commit","") == r.request_id + ":" + r.generation }
+            if r.state == "persisting" && done {
+                r.state = "completed" r.error = nil
+                r.pending_open = {request_id: r.request_id experience_id: r.experience_id generation: r.generation created_at: time_now()}
+            } else { r.state = "failed" r.error = "INTERRUPTED" r.pending_open = nil }
+            changed = true
+        }
+    }
+    if seq > ex_store.seq {
+        let store = ex_store.to_json().parse_json() store.seq = seq
+        if !ex_commit(store) { nf_ext_error = true return }
+    }
+    if changed && !nf_ext_commit(c) { nf_ext_error = true }
+}
+fn nf_external_status(id){ nf_ext_load() if nf_ext_error { return nf_ext_fail("STORAGE_ERROR",id) } let r = nf_ext_find(id) if r == nil { return nf_ext_fail("NOT_FOUND",id) } return nf_ext_ok(nf_ext_data(r)) }
+fn nf_ext_binding_valid(b){
+    let valid = false
+    try { valid = b.owner_app == "dailyflow" && b.caller_app.is_string() && b.caller_app.len() > 0 && b.account.is_string() && b.account.len() > 0 && b.origin_turn_id.is_string() && b.origin_turn_id.len() > 0 } catch { valid = false }
+    return valid
+}
+fn nf_ext_same_sources(a,b){ if a.len() != b.len() { return false } for s in a { if !timeline_ids_contains(b,s) { return false } } return true }
+fn nf_external_submit(binding,args){
+    nf_ext_load()
+    if nf_ext_error || ex_store_error { return nf_ext_fail("STORAGE_ERROR","") }
+    if !nf_ext_binding_valid(binding) { return nf_ext_fail("IDENTITY_MISMATCH","") }
+    if !args.is_object() { return nf_ext_fail("INVALID_ARGUMENT","") }
+    args = args.to_json().parse_json()
+    args.experience_id = business_optional(args,"experience_id",nil)
+    let valid = false
+    try { valid = args.contract_version == 1 && args.request_id.is_string() && args.request_id.len() > 0 && args.request_id.len() <= 128 && args.question.is_string() && args.question.trim().len() > 0 && args.question.len() <= 2000 && args.source_apps.is_array() && args.source_apps.len() <= 32 && (args.experience_id == nil || args.experience_id.is_string()) } catch { valid = false }
+    if !valid { return nf_ext_fail("INVALID_ARGUMENT","") }
+    let id = args.request_id let sources = []
+    for s in args.source_apps {
+        if !s.is_string() || s.len() < 1 || s.len() > 128 || timeline_ids_contains(sources,s) { return nf_ext_fail("INVALID_ARGUMENT",id) }
+        sources.push(s)
+    }
+    let prior = nf_ext_find(id)
+    if prior != nil {
+        if prior.caller_app != binding.caller_app || prior.account != binding.account || prior.question != args.question.trim() || prior.target != args.experience_id || !nf_ext_same_sources(prior.sources,sources) { return nf_ext_fail("REQUEST_CONFLICT",id) }
+        return nf_ext_ok(nf_ext_data(prior))
+    }
+    // One existing query worker: do not accept a second request that cannot
+    // start. Replays above remain valid while the original is running.
+    if ex_busy { return nf_ext_fail("APP_BUSY",id) }
+    for row in nf_ext.requests { if !nf_ext_terminal(row.state) { return nf_ext_fail("APP_BUSY",id) } }
+    if nf_ext.requests.len() >= 128 { return nf_ext_fail("TRUNCATED",id) }
+    if args.experience_id != nil && nf_ext_item(args.experience_id) == nil { return nf_ext_fail("NOT_FOUND",id) }
+    for r in nf_ext.requests { if !nf_ext_terminal(r.state) && args.experience_id != nil && r.experience_id == args.experience_id { return nf_ext_fail("REQUEST_CONFLICT",id) } }
+    // Registered imported identities only here. Independent sources require S's
+    // verified transport integration; do not touch a foreign app-data directory.
+    let catalog = ex_source_catalog()
+    for source in nf_transport_sources() { if source.kind == "independent_app" && source.scope_enabled && !timeline_ids_contains(catalog,source.source_app) { catalog.push(source.source_app) } }
+    for s in sources { if !timeline_ids_contains(catalog,s) { return nf_ext_fail("TRANSPORT_UNAVAILABLE",id) } }
+    let store = ex_store.to_json().parse_json() let target = args.experience_id let reserved = 0
+    if target == nil { store.seq += 1 reserved = store.seq target = "experience-" + store.seq }
+    let c = nf_ext.to_json().parse_json()
+    let fingerprint = {question: args.question.trim() source_apps: sources experience_id: args.experience_id}.to_json()
+    c.requests.push({request_id: id target: args.experience_id experience_id: target reserved_seq: reserved generation: 1 question: args.question.trim() sources: sources fingerprint: fingerprint caller_app: binding.caller_app account: binding.account origin_turn_id: binding.origin_turn_id worker_turn_ids: [] state: "accepted" error: nil pending_open: nil created_at: time_now()})
+    if !nf_ext_commit(c) { return nf_ext_fail("STORAGE_ERROR",id) }
+    if args.experience_id == nil {
+        store.items.push({id: target title: "外部请求" topic: "" start: "" end: "" sources: sources question: args.question.trim()})
+        if !ex_commit(store) { nf_ext_end(id,"failed","STORAGE_ERROR") return nf_ext_fail("STORAGE_ERROR",id) }
+    }
+    return nf_external_status(id)
+}
+fn nf_ext_end(id,state,error){
+    let r = nf_ext_find(id) if r == nil { return nf_ext_fail("NOT_FOUND",id) }
+    if nf_ext_terminal(r.state) { return nf_ext_ok(nf_ext_data(r)) }
+    let c = nf_ext.to_json().parse_json()
+    for row in c.requests { if row.request_id == id { row.state = state row.error = error row.pending_open = nil } }
+    // Invalidate in-memory worker before a possibly failing storage write.
+    if nf_ext_active == id {
+        nf_ext_active = "" ex_cancel()
+        for i in r.sources.len() { try { nf_source_cancel(nf_external_sync_id(id,i)) } catch {} }
+    }
+    if !nf_ext_commit(c) { nf_ext_error = true return nf_ext_fail("STORAGE_ERROR",id) }
+    return nf_external_status(id)
+}
+fn nf_external_cancel(id){ nf_ext_load() if nf_ext_error { return nf_ext_fail("STORAGE_ERROR",id) } return nf_ext_end(id,"cancelled","CANCELLED") }
+fn nf_external_timeout(id,generation){ nf_ext_load() let r = nf_ext_find(id) if r == nil || r.generation != generation { return nf_ext_fail("NOT_FOUND",id) } return nf_ext_end(id,"timed_out","TIMEOUT") }
+fn nf_external_source_allowed(source){
+    if nf_ext_active == "" { return true }
+    let r = nf_ext_find(nf_ext_active) return r != nil && timeline_ids_contains(r.sources,source)
+}
+fn nf_external_start(id){
+    nf_ext_load() if nf_ext_error { return nf_ext_fail("STORAGE_ERROR",id) }
+    let r = nf_ext_find(id) if r == nil { return nf_ext_fail("NOT_FOUND",id) }
+    if r.state != "accepted" { return nf_ext_ok(nf_ext_data(r)) }
+    if nf_ext_active != "" || ex_busy { return nf_ext_fail("APP_BUSY",id) }
+    // No sources means planning only: no implicit all-source fallback or model
+    // context. Current existing worker is a query worker, so fail explicitly.
+    if r.sources.len() == 0 { return nf_ext_end(id,"failed","UNSUPPORTED_PLANNING_ONLY") }
+    let item = nf_ext_item(r.experience_id) if item == nil { return nf_ext_end(id,"failed","NOT_FOUND") }
+    ex_select(item)
+    let c = nf_ext.to_json().parse_json() for row in c.requests { if row.request_id == id { row.state = "reading" } }
+    if !nf_ext_commit(c) { return nf_ext_fail("STORAGE_ERROR",id) }
+    nf_ext_active = id ex_question = r.question ex_adapter = "official"
+    start_timeout(400.0,|| nf_external_timeout(id,1))
+    nf_external_sync_sources(id,|| {
+        if nf_ext_active != id { return }
+        ex_send()
+        if !ex_busy { nf_ext_end(id,"failed","UNAVAILABLE") }
+    })
+    return nf_external_status(id)
+}
+fn nf_external_request_id(){ if nf_ext_active != "" { return nf_ext_active } return "experience-" + time_now() + "-" + ex_serial }
+fn nf_external_phase(state){
+    if nf_ext_active == "" || nf_ext_error { return }
+    let id = nf_ext_active
+    if state == "failed" || state == "needs_clarification" { nf_ext_end(id,"failed",state) return }
+    if state == "cancelled" { nf_ext_end(id,"cancelled","CANCELLED") return }
+    if state == "organizing" {
+        let c = nf_ext.to_json().parse_json() for row in c.requests { if row.request_id == id { row.state = "organizing" } }
+        if !nf_ext_commit(c) { nf_ext_error = true nf_ext_active = "" ex_cancel() }
+    }
+}
+fn nf_external_before_result(candidate){
+    if nf_ext_active == "" { return true }
+    let r = nf_ext_find(nf_ext_active)
+    if nf_ext_error || r == nil || nf_ext_terminal(r.state) || r.experience_id != ex_context() || ex_request != r.request_id { return false }
+    let turns = [] for t in ex_peer_turns { if t.request_id == r.request_id && !timeline_ids_contains(turns,t.turn_id) { turns.push(t.turn_id) } }
+    if turns.len() < 2 { return false }
+    // Reload source revisions immediately before committing. A correction or
+    // deletion during the model turn must not become a completed experience.
+    ex_load()
+    let organization = nil
+    for g in ex_reason_array(candidate,"organizations") { if g.experience == r.experience_id { organization = g } }
+    if organization == nil || !ex_reason_valid(organization) { return false }
+    // Marker and organization are committed in the SAME experiences file write.
+    let found = false
+    for it in candidate.items { if it.id == r.experience_id { it.external_commit = r.request_id + ":" + r.generation found = true } }
+    if !found { return false }
+    let c = nf_ext.to_json().parse_json() for row in c.requests { if row.request_id == r.request_id { row.state = "persisting" row.worker_turn_ids = turns } }
+    return nf_ext_commit(c)
+}
+fn nf_external_result_saved(){
+    if nf_ext_active == "" { return }
+    let id = nf_ext_active let r = nf_ext_find(id)
+    if r == nil || r.state != "persisting" { return }
+    let it = nf_ext_item(r.experience_id)
+    if it == nil || business_optional(it,"external_commit","") != id + ":" + r.generation { nf_ext_end(id,"failed","STORAGE_ERROR") return }
+    let c = nf_ext.to_json().parse_json()
+    for row in c.requests { if row.request_id == id {
+        row.state = "completed" row.error = nil row.pending_open = {request_id: id experience_id: row.experience_id generation: row.generation created_at: time_now()}
+    } }
+    nf_ext_active = ""
+    if !nf_ext_commit(c) { nf_ext_error = true return }
+    start_timeout(0.05,|| nf_external_activate_pending())
+    // The completion window writes several files; a wall-clock script budget
+    // bail can kill the activation entry after the durable write. Retry from
+    // durable state only, so a lost first attempt cannot lose the auto-open.
+    start_timeout(2.0,|| nf_external_recover())
+    start_timeout(8.0,|| nf_external_recover())
+}
+fn nf_external_recover(){
+    nf_ext_load()
+    if nf_ext_error { return }
+    for r in nf_ext.requests {
+        if r.state == "completed" && r.pending_open != nil {
+            if ex_busy && nf_ext_active == "" && ex_request == r.request_id {
+                ex_busy = false
+                ex_event("ready","整理已完成；正在恢复自动定位。")
+                ex_redraw()
+            }
+            nf_external_activate_pending()
+        }
+    }
+}
+fn nf_external_pending_open(){
+    nf_ext_load() if nf_ext_error { return nf_ext_fail("STORAGE_ERROR","") }
+    for r in nf_ext.requests { if r.state == "completed" && r.pending_open != nil {
+        if nf_ext_item(r.experience_id) == nil { return nf_ext_fail("NOT_FOUND",r.request_id) }
+        return nf_ext_ok(r.pending_open.to_json().parse_json())
+    } }
+    return nf_ext_ok(nil)
+}
+fn nf_external_ack_open(id,experience,generation){
+    nf_ext_load() let r = nf_ext_find(id)
+    if nf_ext_error { return nf_ext_fail("STORAGE_ERROR",id) }
+    if r == nil || r.state != "completed" || r.experience_id != experience || r.generation != generation || nf_ext_item(experience) == nil { return nf_ext_fail("NOT_FOUND",id) }
+    if ex_id != experience { return nf_ext_fail("IDENTITY_MISMATCH",id) }
+    let c = nf_ext.to_json().parse_json() for row in c.requests { if row.request_id == id { row.pending_open = nil row.opened_experience_id = experience row.opened_at = time_now() } }
+    if !nf_ext_commit(c) { return nf_ext_fail("STORAGE_ERROR",id) }
+    return nf_ext_ok(nil)
+}
+fn nf_external_open_pending(){
+    if ex_busy || nf_ext_active != "" { return nf_ext_fail("APP_BUSY","") }
+    let p = nf_external_pending_open() if !p["ok"] || p.data == nil { return p }
+    let it = nf_ext_item(p.data.experience_id) if it == nil { return nf_ext_fail("NOT_FOUND",p.data.request_id) }
+    nf_ext_opening = p.data.to_json().parse_json()
+    ex_overlay_close() ex_detail = ""
+    ex_enter() ex_select(it)
+    // The actual experience renderer acknowledges the selected ID.
+    return p
+}
+fn nf_external_activate_pending(){
+    let p = nf_external_pending_open()
+    if !p["ok"] || p.data == nil || ex_busy || nf_ext_active != "" { return }
+    let signal = p.data.to_json().parse_json()
+    host.request("app_tools.focus",{},|r| {
+        if !r.is_ok || r.data.app != "dailyflow" || r.data.mounted != true { return }
+        let current = nf_external_pending_open()
+        if !current["ok"] || current.data == nil || current.data.request_id != signal.request_id || current.data.generation != signal.generation || current.data.experience_id != signal.experience_id { return }
+        nf_external_open_pending()
+    })
+}
+fn nf_external_rendered(experience){
+    if nf_ext_opening == nil || !experience_mode || ex_settings || ex_overlay != "" || experience != nf_ext_opening.experience_id { return }
+    let p = nf_ext_opening nf_ext_opening = nil
+    nf_external_ack_open(p.request_id,p.experience_id,p.generation)
+}
+// Official dispatch only: caller/model cannot supply a replacement context.
+fn nf_external_host_call(call_id,name,args){
+    if !mod.app_tools.active(call_id) { return nf_ext_fail("CANCELLED","") }
+    let req = mod.app_tools.request(call_id)
+    if req == nil { return nf_ext_fail("CANCELLED","") }
+    let context = req.context
+    let origin = business_optional(context,"origin_turn_id","")
+    if origin == "" { return nf_ext_fail("TRANSPORT_UNAVAILABLE",business_optional(args,"request_id","")) }
+    let b = {owner_app: context.app caller_app: context.caller account: business_optional(context,"caller_account",context.account) origin_turn_id: origin}
+    if !nf_ext_binding_valid(b) { return nf_ext_fail("IDENTITY_MISMATCH","") }
+    if name == "dailyflow.experience_request" {
+        let result = nf_external_submit(b,args)
+        if result["ok"] && result.data.state == "accepted" {
+            let id = result.data.request_id start_timeout(0.15,|| nf_external_start(id))
+        }
+        return result
+    }
+    nf_ext_load() let id = business_optional(args,"request_id","") let r = nf_ext_find(id)
+    if r == nil { return nf_ext_fail("NOT_FOUND",id) }
+    if r.caller_app != b.caller_app || r.account != b.account { return nf_ext_fail("IDENTITY_MISMATCH",id) }
+    if name == "dailyflow.experience_request_cancel" { return nf_external_cancel(id) }
+    if name == "dailyflow.experience_request_status" { return nf_external_status(id) }
+    return nf_ext_fail("UNSUPPORTED",id)
+}
+// Source modules are optional in the standalone H journal tests. In the joint
+// candidate they are the explicitly snapshotted S modules, never test replies.
+fn nf_transport_sources(){ let sources = [] try { sources = nf_source_states() } catch {} return sources }
+let nf_transport_epochs = {}
+let nf_transport_watches = {}
+let nf_transport_requests = {}
+let nf_transport_generations = {}
+fn nf_transport_authorized(source){ return business_optional(nf_transport_epochs,source,"") != "" }
+fn nf_transport_binding_current(b,source){
+    let current = false
+    try { current = b.auth_epoch.is_string() && b.auth_epoch.len() > 0 && b.auth_epoch == nf_transport_epochs[source] && b.request_epoch == nfc_epoch() } catch { current = false }
+    return current
+}
+fn nf_transport_read(source,tool,args,id,generation){
+    let local_epoch = nfc_epoch()
+    let key = id + ":" + generation + ":" + business_optional(args,"page",0)
+    nf_transport_requests[id] = key
+    nf_transport_generations[id] = generation
+    host.request("app_tools.read",{source_app: source tool: tool args: args request_id: id generation: generation},|r| {
+        if business_optional(nf_transport_requests,id,"") != key { return }
+        if !r.is_ok {
+            nf_transport_epochs[source] = ""
+            let code = "TRANSPORT_UNAVAILABLE"
+            for known in ["NO_CONSENT" "REVOKED" "APP_NOT_RUNNING" "TIMEOUT" "CANCELLED" "NOT_GRANTED" "READ_ONLY_REQUIRED" "INVALID_ARGUMENT"] { if ("" + r.error).search(known) >= 0 { code = known } }
+            nfs_transport_error(source,{code: code message: "" + r.error retryable: false}) return
+        }
+        let v = r.data let valid = false
+        try { valid = v.request_id == id && v.generation == generation && v.binding.owner_app == source && v.binding.caller_app == "dailyflow" && v.binding.tool_name == tool && v.binding.auth_epoch.is_string() && v.binding.auth_epoch.len() > 0 } catch {}
+        if !valid { nf_transport_epochs[source] = "" nfs_transport_error(source,{code: "IDENTITY_MISMATCH" message: "宿主返回绑定不匹配。" retryable: false}) return }
+        if local_epoch != nfc_epoch() { return }
+        let old_epoch = business_optional(nf_transport_epochs,source,"")
+        if business_optional(args,"page",0) > 0 && old_epoch != v.binding.auth_epoch { nf_transport_epochs[source] = "" nfs_transport_error(source,{code: "REVOKED" message: "分页期间授权已变化。" retryable: false}) return }
+        nf_transport_epochs[source] = v.binding.auth_epoch
+        let binding = v.binding.to_json().parse_json()
+        // Distinct local cancellation epoch; never relabel it as host auth_epoch.
+        binding.request_epoch = local_epoch
+        nf_source_accept_page(binding,id,generation,v.reply)
+        if nfs_runtime_state(source).sync_state == "succeeded" { nf_transport_watch(source,v.binding.auth_epoch) }
+    })
+    return {status: "pending"}
+}
+fn nf_transport_cancel(id){
+    nf_transport_requests[id] = ""
+    host.request("app_tools.cancel",{request_id: id generation: business_optional(nf_transport_generations,id,0)},|r| {})
+    return {status: "pending"}
+}
+fn nf_transport_watch(source,epoch){
+    if business_optional(nf_transport_watches,source,"") == epoch { return }
+    nf_transport_watches[source] = epoch
+    host.request("app_tools.watch_authorization",{source_app: source auth_epoch: epoch},|r| {
+        if business_optional(nf_transport_watches,source,"") != epoch { return }
+        nf_transport_watches[source] = ""
+        if !r.is_ok || business_optional(r.data,"auth_epoch","") != epoch {
+            nf_transport_epochs[source] = "" nfc_refuse(source,"revoked")
+            let affected = ex_sources.len() == 0 || timeline_ids_contains(ex_sources,source)
+            if nf_ext_active != "" {
+                let active = nf_ext_find(nf_ext_active)
+                affected = active != nil && timeline_ids_contains(active.sources,source)
+                if affected { nf_ext_end(nf_ext_active,"failed","REVOKED") }
+            }
+            if affected { ex_cancel() ex_detail = "" ex_reason_snapshot = [] }
+            ex_redraw() return
+        }
+        start_timeout(0.05,|| nf_transport_watch(source,epoch))
+    })
+}
+fn nf_external_sync_id(id,index){
+    for i in nf_ext.requests.len() { if nf_ext.requests[i].request_id == id { return "external-source-" + i + "-" + index } }
+    return "external-missing"
+}
+fn nf_external_sync_sources(id,done){
+    let r = nf_ext_find(id) if r == nil || nf_ext_active != id { return }
+    let waiting = []
+    for i in r.sources.len() {
+        for s in nf_transport_sources() { if s.source_app == r.sources[i] && s.kind == "independent_app" {
+            if !s.scope_enabled { nf_ext_end(id,"failed","REVOKED") return }
+            let sync = nf_source_sync(s.source_app,nf_external_sync_id(id,i))
+            if !sync["ok"] { nf_ext_end(id,"failed",sync.error.code) return }
+            waiting.push(s.source_app)
+        } }
+    }
+    nf_external_wait_sources(id,waiting,done)
+}
+fn nf_external_wait_sources(id,waiting,done){
+    if nf_ext_active != id { return }
+    let pending = false
+    for source in waiting {
+        let s = nfs_runtime_state(source)
+        if s.sync_state == "failed" || s.sync_state == "cancelled" || s.sync_state == "idle" {
+            let code = "TRANSPORT_UNAVAILABLE" let error = nfc_entry(source).last_error
+            if error != nil { code = error.code }
+            nf_ext_end(id,"failed",code) return
+        }
+        if s.sync_state != "succeeded" { pending = true }
+    }
+    if pending { start_timeout(0.15,|| nf_external_wait_sources(id,waiting,done)) } else { done() }
+}
+fn nf_external_validate_sources(serial,owner,result){
+    let id = nf_ext_active
+    if id == "" { return false }
+    nf_external_sync_sources(id,|| {
+        if nf_ext_active != id || serial != ex_serial || !ex_busy || owner != ex_context() { return }
+        ex_reason_accept(serial,owner,result)
+    })
+    return true
+}
+fn nf_external_all_records(){
+    let out = []
+    let current_day = epoch_day(today())
+    if timeline_data != nil { for r in timeline_data.records { out.push(r) } }
+    let sources = nf_transport_sources()
+    for source in sources { if source.kind == "independent_app" && source.scope_enabled {
+        let rows = nf_source_records(source.source_app)
+        for row in rows {
+            let c = row.content let topic = "独立账本"
+            if c.tags.len() > 0 { topic = c.tags[0] }
+            let date = c.occurred_at.split("T")[0] let future = valid_date(date) && epoch_day(date) > current_day
+            out.push({source_app: row.source_app source_module: row.source_module record_id: row.source_record_id revision: row.source_revision content_hash: row.content_hash topic: topic kind: c.kind title: c.title body: c.body date: date occurred_at: c.occurred_at ended_at: business_optional(c,"ended_at",nil) open_end: business_optional(c,"open_end",false) amount_minor: c.amount_minor currency: c.currency tags: c.tags media: c.media source_meta: c.source_meta excluded: false suspicious: false future: future source_mode: "independent_app"})
+        }
+    } }
+    return out
+}
+fn nf_external_read_error(){
+    if timeline_error == "" { return "" }
+    let imported = ex_sources.len() == 0
+    for src in ex_sources { let independent = false for s in nf_transport_sources() { if s.source_app == src && s.kind == "independent_app" { independent = true } } if !independent { imported = true } }
+    if imported { return timeline_error } return ""
+
+// Wrap a user natural-language question into the formal system-assistant
+// prompt used for cross-App experience organization. Topic keywords are
+// auto-detected and request_id is unique per call (default). Output is
+// ready to paste into the OctoSense system Assistant.
+fn ex_wrap_prompt(question){
+    let q = question.trim()
+    let topic = "bouldering" let label = "攀岩"
+    if q.search("演出") >= 0 || q.search("音乐会") >= 0 || q.search("演唱会") >= 0 { topic = "concert" label = "演出" }
+    if q.search("旅行") >= 0 { topic = "travel" label = "旅行" }
+    if q.search("阅读") >= 0 { topic = "reading" label = "阅读" }
+    let rid = topic + "-" + time_now_str()
+    return "帮我整理一下我的" + label + "：" + q + "
+
+请先调用当前宿主实际提供的 agents.list 工具（模型侧名称可能为 agents_list），读取 DailyFlow 的实时 allowed/ready/peer_slug，再用返回的 DailyFlow peer_slug 发出本次新的 peer_send_input 委派。DailyFlow Ledger 是只读来源，整理请求交给 DailyFlow。不能用 peer_gather 的旧任务结果或旧会话文字判断本次 API 是否存在；若旧 peer 状态为 running，先查本轮 agents.list 和实际请求工具返回，不把常驻代理的 running 状态直接当作业务 APP_BUSY。请根据本次真实工具发现与代理状态发起新委派，不沿用历史结果。
+
+传给 DailyFlow 的外部请求必须包含四个字段：contract_version=1、本次唯一且稳定的 request_id、上述 question、source_apps=[\"dailyflow-ledger\"]；experience_id 可省略或传 JSON null，均表示新建。未知结果先查同一 request_id 的 experience_request_status；只有宿主明确在执行前拒绝漏参时允许修正一次，保持同一个 request_id。
+
+这是异步整理请求；遵守实际宿主返回的执行状态，不用高频轮询占住原始代理回合。只有工具及宿主证据显示 completed、经历已保存且定位得到确认，才报告完成。首次授权必须等人处理。遇到拒绝原样说明错误，不调用 dailyflow.apply，不让我手动打开 DailyFlow、点击链接或重新输入，不使用旧 peer 结果或模拟结果代替。
+
+请求标记 " + rid + "。"
+}
+fn time_now_str(){
+    // YYYYMMDDhhmmss
+    let n = time_now()
+    let d = datetime.from_unix(n)
+    return d.year.to_string() + pad2(d.month) + pad2(d.day) + pad2(d.hour) + pad2(d.minute) + pad2(d.second)
+}
+fn pad2(n){
+    let s = n.to_string()
+    if s.len() == 1 { return "0" + s }
+    return s
+}
+}

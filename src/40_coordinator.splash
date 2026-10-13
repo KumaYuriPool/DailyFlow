@@ -174,6 +174,10 @@ fn business_dispatch_official_tool(call_id,name){
     if !mod.app_tools.active(call_id) { return }
     try {
         let request = mod.app_tools.request(call_id)
+        if name == "dailyflow.experience_request" || name == "dailyflow.experience_request_status" || name == "dailyflow.experience_request_cancel" {
+            if request == nil { mod.app_tools.fail(call_id,"CANCELLED") return }
+            mod.app_tools.complete(call_id,nf_external_host_call(call_id,name,request.args)) return
+        }
         if request == nil { mod.app_tools.fail(call_id,"宿主请求已失效，未执行。") return }
         let reply = {
             resolve: fn(token,result){ return mod.app_tools.complete(token,result) }
@@ -192,7 +196,7 @@ fn business_dispatch_tool_using(token,name,args_json,tools){
         if name == "dailyflow.recall" { tools.resolve(token,recall_query(a)) return }
         if name == "dailyflow.timeline_query" { tools.resolve(token,timeline_query(a)) return }
         if name == "dailyflow.query" { tools.resolve(token,business_query(a)) return }
-        if name == "dailyflow.capabilities" { tools.resolve(token,{"ok": true app: "dailyflow" modules: module_capabilities() subjects: subject_catalog(db)}) return }
+        if name == "dailyflow.capabilities" { tools.resolve(token,{"ok": true app: "dailyflow" modules: module_capabilities() subjects: subject_catalog(db) sources: nf_transport_sources() external_experiences: {contract_version: 1 request_tool: "dailyflow.experience_request" status_tool: "dailyflow.experience_request_status"}}) return }
         if name == "dailyflow.module_query" { tools.resolve(token,module_query(a)) return }
         if name == "dailyflow.flow_query" { tools.resolve(token,flow_query(business_optional(a,"flow_id",""))) return }
         if name == "dailyflow.save_record" || name == "dailyflow.apply" { let result = business_save(a) if result["ok"] { message = result.message redraw() } tools.resolve(token,result) return }

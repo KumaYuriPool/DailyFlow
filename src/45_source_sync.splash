@@ -1,0 +1,619 @@
+// 45_source_sync: deterministic read-only sync from independent sources into a
+// committed local projection (contract v1.0.0 §4/§5). Transport is H's boundary:
+// nf_transport_read / nf_transport_cancel. Until that returns real pages the
+// sync honestly reports TRANSPORT_UNAVAILABLE; offline fixtures never ship in
+// the production module. Store: source-sync-v1.json (version 1). Checkpoint is
+// committed only after every page validates; projection and checkpoint land in
+// one write_checked candidate, never cursor-first.
+fn canon_floor(v){ let t = v - v % 1 if v < t { return t - 1 } return t }
+fn l_object_keys(value){ let keys = [] for key item in value { keys.push("" + key) } return keys }
+// ============================================================================
+// BEGIN-SHARED night-source-canon-core (contract v1.0.0 §4)
+// Canonical JSON serialization (fixed field order, UTF-8 bytes, Python
+// sort_keys/compact/no-ascii-escape compatible) + receipt fingerprints.
+// The SHA-256 engine lives in the sibling block night-source-sha256,
+// included only where the host budget allows (see contract-change §8).
+// ============================================================================
+let sha_has_keys = nil
+let sha_hex_digits = nil
+fn sha_hex(){ if sha_hex_digits == nil { sha_hex_digits = "0 1 2 3 4 5 6 7 8 9 a b c d e f".split(" ") } return sha_hex_digits }
+let sha_pow2 = nil
+fn sha_p2(){ if sha_pow2 == nil { sha_pow2 = "1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768 65536 131072 262144 524288 1048576 2097152 4194304 8388608 16777216 33554432 67108864 134217728 268435456 536870912 1073741824 2147483648 4294967296".split(" ") } return sha_pow2 }
+let sha_k = nil
+fn sha_kk(){ if sha_k == nil { sha_k = "1116352408 1899447441 3049323471 3921009573 961987163 1508970993 2453635748 2870763221 3624381080 310598401 607225278 1426881987 1925078388 2162078206 2614888103 3248222580 3835390401 4022224774 264347078 604807628 770255983 1249150122 1555081692 1996064986 2554220882 2821834349 2952996808 3210313671 3336571891 3584528711 113926993 338241895 666307205 773529912 1294757372 1396182291 1695183700 1986661051 2177026350 2456956037 2730485921 2820302411 3259730800 3345764771 3516065817 3600352804 4094571909 275423344 430227734 506948616 659060556 883997877 958139571 1322822218 1537002063 1747873779 1955562222 2024104815 2227730452 2361852424 2428436474 2756734187 3204031479 3329325298".split(" ") } return sha_k }
+// Nibble-pair tables (16x16) build in a single cheap pass; the 256x256 byte
+// tables' quadratic push cost and the per-call instruction budget both killed
+// the byte variant (measured: vm-probe-dev9/dev10). One 64-byte block with
+// nibble tables is ~54k instructions; multi-block content exceeds the current
+// VMs' per-call budget (contract-change §8).
+fn sha_tables_ready(){ return true }
+fn sha_build_step(){}
+fn canon_push_str(out,s){ for b in s.to_bytes() { out.push(b) } }
+fn canon_hex_byte(d){ if d < 10 { return 48 + d } return 87 + d }
+fn canon_emit_string(s,out){
+    out.push(34)
+    for b in s.to_bytes() {
+        if b == 34 { out.push(92) out.push(34) }
+        else {
+            if b == 92 { out.push(92) out.push(92) }
+            else {
+                if b == 8 { out.push(92) out.push(98) }
+                else {
+                    if b == 9 { out.push(92) out.push(116) }
+                    else {
+                        if b == 10 { out.push(92) out.push(110) }
+                        else {
+                            if b == 12 { out.push(92) out.push(102) }
+                            else {
+                                if b == 13 { out.push(92) out.push(114) }
+                                else {
+                                    if b < 32 {
+                                        out.push(92) out.push(117) out.push(48) out.push(48)
+                                        out.push(canon_hex_byte(canon_floor(b / 16))) out.push(canon_hex_byte(b % 16))
+                                    }
+                                    else { out.push(b) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.push(34)
+}
+fn canon_num(v){
+    if v != canon_floor(v) { return "0" }
+    if v == 0 { return "0" }
+    if v < 0 { return "-" + canon_num(-v) }
+    let digits = ["0" "1" "2" "3" "4" "5" "6" "7" "8" "9"]
+    let s = "" let n = v
+    while n > 0 { s = digits[n % 10] + s n = canon_floor(n / 10) }
+    return s
+}
+fn canon_key_lt(a,b){
+    let ab = a.to_bytes() let bb = b.to_bytes()
+    let n = ab.len() if bb.len() < n { n = bb.len() }
+    for i in n {
+        if ab[i] < bb[i] { return true }
+        if ab[i] > bb[i] { return false }
+    }
+    return ab.len() < bb.len()
+}
+// Hosts without object key enumeration (older dev VMs): keys() is probed once.
+fn canon_keys_supported(){ return true }
+
+fn canon_sort_keys(keys){
+    let out = [] for k in keys { out.push(k) }
+    for i in out.len() {
+        let j = i
+        while j > 0 {
+            if canon_key_lt(out[j], out[j - 1]) { let t = out[j - 1] out[j - 1] = out[j] out[j] = t j -= 1 }
+            else { j = 0 }
+        }
+    }
+    return out
+}
+// Fixed-order emitters for the two contract object shapes. The key list is
+// alphabetical, matching sort_keys=True byte-for-byte without enumeration.
+fn canon_emit_content(c,out){
+    // Delete receipts carry an empty content object.
+    if c.to_json() == "{}" { out.push(123) out.push(125) return }
+    out.push(123)
+    canon_push_str(out,"\"amount_minor\":") canon_push_str(out,canon_num(c.amount_minor))
+    canon_push_str(out,",\"body\":") canon_emit_string(c.body,out)
+    canon_push_str(out,",\"currency\":") canon_emit_string(c.currency,out)
+    canon_push_str(out,",\"ended_at\":") canon_emit_string(c.ended_at,out)
+    canon_push_str(out,",\"kind\":") canon_emit_string(c.kind,out)
+    canon_push_str(out,",\"media\":") canon_emit(c.media,out)
+    canon_push_str(out,",\"occurred_at\":") canon_emit_string(c.occurred_at,out)
+    canon_push_str(out,",\"open_end\":") canon_emit(c.open_end,out)
+    canon_push_str(out,",\"source_meta\":") canon_emit_meta(c.source_meta,out)
+    canon_push_str(out,",\"tags\":") canon_emit(c.tags,out)
+    canon_push_str(out,",\"title\":") canon_emit_string(c.title,out)
+    out.push(125)
+}
+fn canon_emit_meta(m,out){
+    // Empty meta must not require key enumeration (keys() is absent on some VMs).
+    if m.to_json() == "{}" { out.push(123) out.push(125) return }
+    let ks = l_object_keys(m)
+    let sorted = canon_sort_keys(ks)
+    out.push(123)
+    let first = true
+    for k in sorted {
+        if !first { out.push(44) }
+        canon_emit_string(k,out) out.push(58) canon_emit(m[k],out)
+        first = false
+    }
+    out.push(125)
+}
+// Receipt payload shape: {content, expected_revision, operation, record_id}.
+fn canon_emit_receipt(p,out){
+    out.push(123)
+    canon_push_str(out,"\"content\":") canon_emit_content(p.content,out)
+    canon_push_str(out,",\"expected_revision\":") canon_push_str(out,canon_num(p.expected_revision))
+    canon_push_str(out,",\"operation\":") canon_emit_string(p.operation,out)
+    canon_push_str(out,",\"record_id\":") canon_emit_string(p.record_id,out)
+    out.push(125)
+}
+fn canon_emit(v,out){
+    if v == nil { canon_push_str(out,"null") return }
+    if v.is_bool() { if v { canon_push_str(out,"true") } else { canon_push_str(out,"false") } return }
+    if v.is_number() { canon_push_str(out,canon_num(v)) return }
+    if v.is_string() { canon_emit_string(v,out) return }
+    if v.is_array() {
+        out.push(91)
+        let first = true
+        for item in v { if !first { out.push(44) } canon_emit(item,out) first = false }
+        out.push(93)
+        return
+    }
+    // Generic object (sorted keys) — requires key enumeration support.
+    let sorted = canon_sort_keys(l_object_keys(v))
+    out.push(123)
+    let first = true
+    for k in sorted {
+        if !first { out.push(44) }
+        canon_emit_string(k,out) out.push(58) canon_emit(v[k],out)
+        first = false
+    }
+    out.push(125)
+}
+fn canon_bytes(v){ let out = [] canon_emit(v,out) return out }
+// Contract content_hash over the fixed-order content serialization.
+// Receipt fingerprint: plain hex of the canonical receipt bytes. Idempotency
+// needs exact-match comparison, not collision resistance, so receipts do not
+// spend the VM's instruction budget on SHA-256 (contract §3 unchanged).
+fn receipt_payload_hex(operation,record_id,expected_revision,content){
+    let bytes = [] canon_emit_receipt({content: content expected_revision: expected_revision operation: operation record_id: record_id},bytes)
+    let digits = sha_hex()
+    let out = "" for b in bytes { out += digits[canon_floor(b / 16)] + digits[b % 16] }
+    return out
+}
+// ============================================================================
+// END-SHARED night-source-canon-core
+// ============================================================================
+
+// Native bitwise SHA-256; shared canonical globals live in 10_canon.
+fn sha_and32(x,y){ return x & y }
+fn sha_xor32(x,y){ return x ^ y }
+fn sha_not32(x){ return 4294967295 - x }
+fn sha_rotr(x,n){ let p = sha_p2()[n].to_f64() return canon_floor(x / p) + (x % p) * sha_p2()[32 - n].to_f64() }
+fn sha_shr(x,n){ return canon_floor(x / sha_p2()[n].to_f64()) }
+fn sha256_hex(bytes){
+    let h0 = 1779033703 let h1 = 3144134277 let h2 = 1013904242 let h3 = 2773480762
+    let h4 = 1359893119 let h5 = 2600822924 let h6 = 528734635 let h7 = 1541459225
+    let msg = []
+    for sb in bytes { msg.push(sb) }
+    let bitlen = bytes.len() * 8
+    msg.push(128)
+    while msg.len() % 64 != 56 { msg.push(0) }
+    let hi = canon_floor(bitlen / 4294967296) let lo = bitlen % 4294967296
+    let shift = 24
+    while shift >= 0 { msg.push(canon_floor(hi / sha_p2()[shift].to_f64()) % 256) shift -= 8 }
+    shift = 24
+    while shift >= 0 { msg.push(canon_floor(lo / sha_p2()[shift].to_f64()) % 256) shift -= 8 }
+    let blocks = msg.len() / 64
+    for blk in blocks {
+        let base = blk * 64
+        let sw = []
+        for t in 16 {
+            let o = base + t * 4
+            sw.push(msg[o] * 16777216 + msg[o + 1] * 65536 + msg[o + 2] * 256 + msg[o + 3])
+        }
+        for t in 48 {
+            let i = t + 16
+            let x = sw[i - 15] let y = sw[i - 2]
+            let s0 = ((((x >> 7) | ((x & 127) << 25)) ^  ((x >> 18) | ((x & 262143) << 14))) ^  (x >> 3))
+            let s1 = ((((y >> 17) | ((y & 131071) << 15)) ^  ((y >> 19) | ((y & 524287) << 13))) ^  (y >> 10))
+            sw.push((s1 + sw[i - 7] + s0 + sw[i - 16]) % 4294967296)
+        }
+        let sa = h0 let sb = h1 let sc = h2 let sd = h3 let se = h4 let sf = h5 let sg = h6 let shh = h7
+        for t in 64 {
+            let s1 = ((((se >> 6) | ((se & 63) << 26)) ^  ((se >> 11) | ((se & 2047) << 21))) ^  ((se >> 25) | ((se & 33554431) << 7)))
+            let ch = ((se & sf) ^  (sha_not32(se) & sg))
+            let t1 = (((shh + s1 + ch) % 4294967296) + sha_kk()[t].to_f64() + sw[t]) % 4294967296
+            let s0 = ((((sa >> 2) | ((sa & 3) << 30)) ^  ((sa >> 13) | ((sa & 8191) << 19))) ^  ((sa >> 22) | ((sa & 4194303) << 10)))
+            let maj = (((sa & sb) ^  (sa & sc)) ^  (sb & sc))
+            let t2 = (s0 + maj) % 4294967296
+            shh = sg sg = sf sf = se se = (sd + t1) % 4294967296
+            sd = sc sc = sb sb = sa sa = (t1 + t2) % 4294967296
+        }
+        h0 = (h0 + sa) % 4294967296 h1 = (h1 + sb) % 4294967296 h2 = (h2 + sc) % 4294967296 h3 = (h3 + sd) % 4294967296
+        h4 = (h4 + se) % 4294967296 h5 = (h5 + sf) % 4294967296 h6 = (h6 + sg) % 4294967296 h7 = (h7 + shh) % 4294967296
+    }
+    let words = [h0 h1 h2 h3 h4 h5 h6 h7]
+    let out = ""
+    for word in words {
+        let j = 7
+        while j >= 0 {
+            out += sha_hex()[canon_floor(word / sha_p2()[j * 4].to_f64()) % 16]
+            j -= 1
+        }
+    }
+    return out
+}
+// Contract content_hash over the fixed-order content serialization.
+fn sha_supported(){ return true }
+fn content_hash_of(content){ let out = [] canon_emit_content(content,out) return sha256_hex(out) }
+// Receipt fingerprint: plain hex of the canonical receipt bytes. Idempotency
+// needs exact-match comparison, not collision resistance, so receipts do not
+// spend the VM's instruction budget on SHA-256 (contract §3 unchanged).
+
+// ============================================================================
+// END-SHARED night-source-sha256
+// ============================================================================
+
+// Consumer page width is 1 on purpose: the current script VM's per-call
+// instruction budget fits about one SHA-256 block, so each page carries one
+// item (contract allows 1..50; the ledger serves any width). Raise when the
+// hash path gets a budget-safe home (contract-change §8).
+let nfs_page_size = 1
+let nfs_file = "source-sync-v1.json"
+let nfs_store = nil
+let nfs_store_error = false
+let nfs_runtime = {}
+let nfs_transport_cancel_failed = false
+fn nfs_fresh_store(){ return {version: 1 projection: [] checkpoints: {}} }
+fn nfs_record_id_ok(id){ if !id.is_string() { return false } return regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", "").test(id) }
+fn nfs_request_id_ok(id){ if !id.is_string() { return false } return regex("^[A-Za-z0-9_-]{1,128}$", "").test(id) }
+fn nfs_utc_stamp_ok(s){
+    if !s.is_string() { return false }
+    if !regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "").test(s) { return false }
+    return valid_date(s.split("T")[0])
+}
+// Contract §4 content rules for kind=expense (consumer-side mirror of the
+// ledger's own validation; a violation means the source is lying or buggy).
+fn nfs_content_valid(c){
+    if !c.is_object() { return false }
+    for key in ["kind" "occurred_at" "ended_at" "open_end" "title" "body" "media" "tags" "amount_minor" "currency" "source_meta"] { if business_optional(c,key,nil) == nil { return false } }
+    if c.kind != "expense" { return false }
+    if !c.occurred_at.is_string() { return false }
+    let day = c.occurred_at
+    if day.len() > 10 {
+        if !regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\+08:00$", "").test(c.occurred_at) { return false }
+        day = c.occurred_at.split("T")[0]
+        let hm = c.occurred_at.split("T")[1].split("+")[0].split(":")
+        let h = hm[0].to_f64() let mi = hm[1].to_f64() let se = hm[2].to_f64()
+        if h > 23 || mi > 59 || se > 59 { return false }
+    }
+    if !valid_date(day) { return false }
+    if !c.ended_at.is_string() || c.ended_at != "" { return false }
+    if !c.open_end.is_bool() || c.open_end { return false }
+    if !c.title.is_string() || c.title.len() < 1 || c.title.len() > 80 { return false }
+    if !c.body.is_string() || c.body.len() > 4000 { return false }
+    if !c.media.is_array() || c.media.len() != 0 { return false }
+    if !c.tags.is_array() || c.tags.len() > 12 { return false }
+    for tag in c.tags { if !tag.is_string() || tag.len() < 1 || tag.len() > 40 { return false } }
+    if !c.amount_minor.is_number() || c.amount_minor != canon_floor(c.amount_minor) || c.amount_minor < 0 || c.amount_minor > 9007199254740991 { return false }
+    if !c.currency.is_string() || !regex("^[A-Z]{3}$", "").test(c.currency) { return false }
+    if !c.source_meta.is_object() { return false }
+    let keys = nf_source_keys(c.source_meta)
+    if keys.len() > 12 { return false }
+    for k in keys {
+        if !k.is_string() || k.len() < 1 || k.len() > 40 { return false }
+        let v = c.source_meta[k]
+        if v.is_string() { if v.len() > 200 { return false } }
+        else {
+            if v.is_number() { if v != canon_floor(v) || v < -9007199254740991 || v > 9007199254740991 { return false } }
+            else { if !v.is_bool() { return false } }
+        }
+    }
+    return true
+}
+fn nfs_projection_valid(items){
+    if !items.is_array() || items.len() > 5000 { return false }
+    let seen = []
+    for p in items {
+        if !p.is_object() { return false }
+        for key in ["source_app" "source_module" "source_record_id" "source_revision" "alive" "content_hash"] { if business_optional(p,key,nil) == nil { return false } }
+        if !p.is_object() || !p.source_app.is_string() || !p.source_module.is_string() { return false }
+        if !nfs_record_id_ok(p.source_record_id) { return false }
+        if !p.source_revision.is_number() || p.source_revision < 1 || canon_floor(p.source_revision) != p.source_revision { return false }
+        if !p.alive.is_bool() { return false }
+        let key = p.source_app + "/" + p.source_module + "/" + p.source_record_id
+        for old in seen { if old == key { return false } } seen.push(key)
+        if !p.content_hash.is_string() { return false }
+        if p.alive { if !nfs_content_valid(business_optional(p,"content",nil)) { return false } }
+        else { if !nfs_utc_stamp_ok(business_optional(p,"deleted_at",nil)) { return false } }
+    }
+    return true
+}
+fn nfs_store_valid(v){
+    if !v.is_object() { return false }
+    if business_optional(v,"version",0) != 1 { return false }
+    let checkpoints = business_optional(v,"checkpoints",nil)
+    if !checkpoints.is_object() { return false }
+    if !nfs_projection_valid(business_optional(v,"projection",nil)) { return false }
+    for app in nf_source_keys(checkpoints) {
+        let cp = checkpoints[app]
+        if !cp.is_object() { return false }
+        let revision = business_optional(cp,"snapshot_revision",nil)
+        let pages = business_optional(cp,"pages",nil)
+        if !revision.is_number() || revision < 1 || revision % 1 != 0 { return false }
+        if !pages.is_number() || pages < 1 || pages % 1 != 0 { return false }
+        if !business_optional(cp,"fetched_at",nil).is_string() { return false }
+    }
+    return true
+}
+fn nfs_persist(candidate){
+    if nfs_store_error { return false }
+    if !nfs_store_valid(candidate) { return false }
+    if !write_checked(nfs_file,candidate.to_json()) { return false }
+    nfs_store = candidate
+    return true
+}
+fn nfs_load(){
+    if nfs_store != nil { return }
+    let data = read_json(nfs_file)
+    if data == nil {
+        if fs.exists(nfs_file) { nfs_store_error = true }
+        nfs_store = nfs_fresh_store()
+        if !nfs_store_error { if !nfs_persist(nfs_store) { nfs_store_error = true } }
+        return
+    }
+    if !nfs_store_valid(data) { nfs_store_error = true nfs_store = nfs_fresh_store() return }
+    nfs_store = data
+}
+fn nfs_runtime_state(app){
+    let rt = nil
+    try { rt = nfs_runtime[app] } catch { rt = nil }
+    if rt == nil { return {sync_state: "idle" request_id: "" generation: 0} }
+    return rt
+}
+fn nfs_result(source_valid,data,error){ if source_valid { return {"ok": true data: data error: nil} } return {"ok": false data: nil error: error} }
+fn nfs_err(code,message,retryable,request_id,app){ return {code: code message: message retryable: retryable request_id: request_id source_app: app} }
+// Read model for U/I: only granted + scope-enabled sources expose the committed
+// projection; unknown/denied/revoked/unavailable hides cached content entirely.
+fn nf_source_records(source_app){
+    if !nf_transport_authorized(source_app) { return [] }
+    nfs_load()
+    if nfs_store_error || nfc_store_error { return [] }
+    let k = nfc_known(source_app) if k == nil { return [] }
+    let e = nfc_entry(source_app)
+    if e.authorization != "granted" || !e.scope_enabled { return [] }
+    let out = []
+    for p in nfs_store.projection {
+        if p.source_app == source_app && p.alive {
+            out.push({source_app: p.source_app source_module: p.source_module source_record_id: p.source_record_id
+                source_revision: p.source_revision content_hash: p.content_hash content: p.content})
+        }
+    }
+    return out
+}
+fn nf_source_sync(source_app,request_id){
+    nfs_load()
+    nfc_load()
+    if nfs_store_error || nfc_store_error { return nfs_result(false,nil,nfs_err("STORAGE_ERROR","来源状态异常，未开始读取；请保留原文件并恢复备份。",false,request_id,source_app)) }
+    let k = nfc_known(source_app)
+    if k == nil { return nfs_result(false,nil,nfs_err("NOT_FOUND","未知来源。",false,request_id,source_app)) }
+    if k.kind != "independent_app" { return nfs_result(false,nil,nfs_err("UNSUPPORTED","该来源不走实时同步通道。",false,request_id,source_app)) }
+    if !nfc_entry(source_app).scope_enabled { return nfs_result(false,nil,nfs_err("INVALID_ARGUMENT","本机读取范围已关闭；宿主授权未改变。",false,request_id,source_app)) }
+    if !nfs_request_id_ok(request_id) { return nfs_result(false,nil,nfs_err("INVALID_ARGUMENT","request_id 须为 1–128 位字母数字-_。",false,"",source_app)) }
+    // denied/revoked never blocks a fresh explicit attempt: only the host knows
+    // the current grant, and the transport answers NO_CONSENT/REVOKED. The
+    // refusal state gates cache visibility (nf_source_records), not retries;
+    // the app never retries automatically — retries are explicit user actions.
+    let rt = nfs_runtime_state(source_app)
+    if rt.sync_state == "reading" || rt.sync_state == "validating" {
+        if rt.request_id == request_id { return nfs_result(true,{request_id: request_id state: rt.sync_state},nil) }
+        return nfs_result(false,nil,nfs_err("REQUEST_CONFLICT","该来源已有进行中的同步。",false,request_id,source_app))
+    }
+    let generation = rt.generation + 1
+    nfs_runtime[source_app] = {sync_state: "reading" request_id: request_id generation: generation page: 0 page_size: 1 snapshot: nil staged: [] restarted: false pages: 0}
+    nfs_drive(source_app)
+    let after = nfs_runtime_state(source_app)
+    return nfs_result(true,{request_id: request_id state: after.sync_state},nil)
+}
+fn nfs_drive(app){
+    let rt = nfs_runtime_state(app)
+    if rt.sync_state != "reading" && rt.sync_state != "validating" { return }
+    let args = {contract_version: 1 page: rt.page page_size: rt.page_size}
+    if rt.snapshot != nil { args.snapshot_revision = rt.snapshot }
+    let reply = nil let failed = false
+    try { reply = nf_transport_read(app,"dailyflowledger.read_events",args,rt.request_id,rt.generation) } catch { failed = true }
+    if failed || reply == nil { nfs_fail(app,"TRANSPORT_UNAVAILABLE","真实跨 App 传输不可用；待系统入口线接入。",true) return }
+    let status = business_optional(reply,"status","")
+    if status == "pending" { return }
+    if status == "error" { nfs_transport_error(app,business_optional(reply,"error",{})) return }
+    if status != "reply" { nfs_fail(app,"TRANSPORT_UNAVAILABLE","传输层返回无法识别。",true) return }
+    try { nfs_handle_page(app,business_optional(reply,"reply",nil)) } catch { nfs_fail(app,"SCHEMA_MISMATCH","来源页处理异常；未提交任何暂存。",false) }
+}
+fn nf_source_accept_page(binding,request_id,generation,reply){
+    nfs_load()
+    let app = ""
+    for key in nf_source_keys(nfs_runtime) {
+        let rt = nfs_runtime[key]
+        if rt.request_id == request_id && (rt.sync_state == "reading" || rt.sync_state == "validating") { app = key }
+    }
+    if app == "" { return nfs_result(false,nil,nfs_err("CANCELLED","没有等待该请求的同步；迟到结果已拒收。",false,request_id,"")) }
+    let rt = nfs_runtime_state(app)
+    if rt.generation != generation { return nfs_result(false,nil,nfs_err("CANCELLED","该请求已被取消或替换；迟到结果已拒收。",false,request_id,app)) }
+    let ok_binding = false
+    try {
+        ok_binding = binding.is_object() && binding.owner_app == app && binding.caller_app == "dailyflow" && binding.tool_name == "dailyflowledger.read_events" && nf_transport_binding_current(binding,app)
+    } catch { ok_binding = false }
+    if !ok_binding { nfs_fail(app,"IDENTITY_MISMATCH","来源绑定与宿主授权上下文不一致。",false) return nfs_result(false,nil,nfs_err("IDENTITY_MISMATCH","来源绑定无效。",false,request_id,app)) }
+    // A host-mediated page with a current-epoch binding is the fresh
+    // authorization evidence that re-enables the cached projection.
+    if rt.page == 0 && rt.pages == 0 { nfc_mark(app,{authorization: "granted" connection: "available"}) }
+    try { nfs_handle_page(app,reply) } catch { nfs_fail(app,"SCHEMA_MISMATCH","来源页处理异常；未提交任何暂存。",false) }
+    let after = nfs_runtime_state(app)
+    return nfs_result(true,{request_id: request_id state: after.sync_state},nil)
+}
+fn nfs_transport_error(app,error){
+    let code = business_optional(error,"code","TRANSPORT_UNAVAILABLE")
+    let message = business_optional(error,"message","传输失败。")
+    if code == "NO_CONSENT" || code == "REVOKED" {
+        let rid = nfs_runtime_state(app).request_id
+        if code == "NO_CONSENT" { nfc_refuse(app,"denied") } else { nfc_refuse(app,"revoked") }
+        let cur = nfs_runtime_state(app)
+        nfs_runtime[app] = {sync_state: "failed" request_id: rid generation: cur.generation}
+        nfc_mark(app,{last_error: {code: code message: message retryable: false}})
+        return
+    }
+    if code == "SNAPSHOT_CHANGED" { nfs_snapshot_changed(app) return }
+    nfs_fail(app,code,message,true)
+    if code == "TRANSPORT_UNAVAILABLE" || code == "APP_NOT_RUNNING" { nfc_mark(app,{connection: "unavailable"}) }
+}
+fn nfs_snapshot_changed(app){
+    let rt = nfs_runtime_state(app)
+    if !rt.restarted {
+        // Allowed exactly once: restart the whole pull from page 0.
+        nfs_runtime[app] = {sync_state: "reading" request_id: rt.request_id generation: rt.generation page: 0 page_size: rt.page_size snapshot: nil staged: [] restarted: true pages: 0}
+        nfs_drive(app)
+        return
+    }
+    nfs_fail(app,"SNAPSHOT_CHANGED","快照在两次拉取间持续变化。",true)
+}
+fn nfs_fail(app,code,message,retryable){
+    let rt = nfs_runtime_state(app)
+    nfc_mark(app,{last_error: {code: code message: message retryable: retryable}})
+    nfs_runtime[app] = {sync_state: "failed" request_id: rt.request_id generation: rt.generation}
+}
+fn nfs_handle_page(app,reply){
+    let rt = nfs_runtime_state(app)
+    if rt.sync_state != "reading" && rt.sync_state != "validating" { return }
+    if reply == nil || !reply.is_object() { nfs_fail(app,"SCHEMA_MISMATCH","来源返回不是结果对象。",false) return }
+    let is_ok = false try { is_ok = reply["ok"] } catch { is_ok = false }
+    if !is_ok {
+        let error = business_optional(reply,"error",{})
+        let code = business_optional(error,"code","SCHEMA_MISMATCH")
+        if code == "SNAPSHOT_CHANGED" { nfs_snapshot_changed(app) return }
+        if code == "NO_CONSENT" || code == "REVOKED" { nfs_transport_error(app,error) return }
+        nfs_fail(app,code,business_optional(error,"message","来源返回失败。"),business_optional(error,"retryable",true))
+        return
+    }
+    let env = reply.data
+    if env == nil || !env.is_object() { nfs_fail(app,"SCHEMA_MISMATCH","来源结果缺少 data。",false) return }
+    if env.contract_version != 1 { nfs_fail(app,"SCHEMA_MISMATCH","contract_version 须为 1。",false) return }
+    let fetched_at = business_optional(env,"fetched_at","")
+    if !fetched_at.is_string() || !nfs_utc_stamp_ok(fetched_at) { nfs_fail(app,"SCHEMA_MISMATCH","信封缺少有效 fetched_at（UTC RFC3339）。",false) return }
+    if env.source_app != app { nfs_fail(app,"IDENTITY_MISMATCH","信封来源与绑定来源不一致。",false) return }
+    let k = nfc_known(app)
+    if env.source_module != k.source_module { nfs_fail(app,"IDENTITY_MISMATCH","信封模块与注册模块不一致。",false) return }
+    if !env.snapshot_revision.is_number() || env.snapshot_revision < 1 || canon_floor(env.snapshot_revision) != env.snapshot_revision { nfs_fail(app,"SCHEMA_MISMATCH","快照修订无效。",false) return }
+    if !env.page.is_number() || env.page != rt.page { nfs_fail(app,"INVALID_PAGE","页序不连续。",false) return }
+    if !env.page_size.is_number() || env.page_size != rt.page_size { nfs_fail(app,"INVALID_PAGE","页大小在分页途中变化。",false) return }
+    if !env.records.is_array() || !env.tombstones.is_array() { nfs_fail(app,"SCHEMA_MISMATCH","信封缺少 records/tombstones。",false) return }
+    if env.records.len() + env.tombstones.len() > rt.page_size { nfs_fail(app,"INVALID_PAGE","单页条目超过 page_size。",false) return }
+    if !env.has_more.is_bool() { nfs_fail(app,"SCHEMA_MISMATCH","has_more 须为布尔值。",false) return }
+    if env.has_more && env.records.len() + env.tombstones.len() == 0 { nfs_fail(app,"INVALID_PAGE","has_more 为真时页面不能为空。",false) return }
+    if rt.page == 0 { rt.snapshot = env.snapshot_revision nfs_runtime[app] = rt }
+    else { if env.snapshot_revision != rt.snapshot { nfs_snapshot_changed(app) return } }
+    // Validate and stage every item; nothing is committed mid-pagination.
+    let staged = rt.staged
+    let seen = []
+    for item in staged { seen.push(item.source_record_id) }
+    for rec in env.records {
+        let identity_ok = false
+        try { identity_ok = rec.source_app == app && rec.source_module == k.source_module } catch { identity_ok = false }
+        if !identity_ok { nfs_fail(app,"IDENTITY_MISMATCH","记录身份与绑定来源不一致。",false) return }
+        let shape_ok = false
+        try { shape_ok = rec.source_app == app && rec.source_module == k.source_module && nfs_record_id_ok(rec.source_record_id) && rec.source_revision.is_number() && rec.source_revision >= 1 && canon_floor(rec.source_revision) == rec.source_revision && rec.content_hash.is_string() && rec.content != nil } catch { shape_ok = false }
+        if !shape_ok { nfs_fail(app,"SCHEMA_MISMATCH","记录身份或形状无效。",false) return }
+        if !nfs_content_valid(rec.content) { nfs_fail(app,"SCHEMA_MISMATCH","记录内容不符合契约。",false) return }
+        for old in seen { if old == rec.source_record_id { nfs_fail(app,"SCHEMA_MISMATCH","同一快照内记录身份重复。",false) return } }
+        seen.push(rec.source_record_id)
+        if !sha_supported() { nfs_fail(app,"UNSUPPORTED","当前宿主脚本预算不支持内容哈希复算（contract-change §8）；未提交。",false) return }
+        if content_hash_of(rec.content) != rec.content_hash { nfs_fail(app,"HASH_MISMATCH","内容哈希无法复算一致。",false) return }
+        staged.push({source_app: app source_module: k.source_module source_record_id: rec.source_record_id source_revision: rec.source_revision alive: true content_hash: rec.content_hash content: rec.content deleted_at: ""})
+    }
+    for tomb in env.tombstones {
+        let identity_ok = false
+        try { identity_ok = tomb.source_app == app && tomb.source_module == k.source_module } catch { identity_ok = false }
+        if !identity_ok { nfs_fail(app,"IDENTITY_MISMATCH","墓碑身份与绑定来源不一致。",false) return }
+        let shape_ok = false
+        try { shape_ok = tomb.source_app == app && tomb.source_module == k.source_module && nfs_record_id_ok(tomb.source_record_id) && tomb.source_revision.is_number() && tomb.source_revision >= 1 && canon_floor(tomb.source_revision) == tomb.source_revision && nfs_utc_stamp_ok(tomb.deleted_at) } catch { shape_ok = false }
+        if !shape_ok { nfs_fail(app,"SCHEMA_MISMATCH","墓碑身份或形状无效。",false) return }
+        for old in seen { if old == tomb.source_record_id { nfs_fail(app,"SCHEMA_MISMATCH","同一快照内记录身份重复。",false) return } }
+        seen.push(tomb.source_record_id)
+        staged.push({source_app: app source_module: k.source_module source_record_id: tomb.source_record_id source_revision: tomb.source_revision alive: false content_hash: "" content: nil deleted_at: tomb.deleted_at})
+    }
+    rt.staged = staged rt.pages = rt.pages + 1 nfs_runtime[app] = rt
+    if staged.len() > 5000 || rt.pages > 100 { nfs_fail(app,"TRUNCATED","快照超出本轮上限（100 ҳ / 5000 项）。",true) return }
+    if env.has_more {
+        let nrt = nfs_runtime_state(app) nrt.page = rt.page + 1 nfs_runtime[app] = nrt
+        nfs_drive(app)
+        return
+    }
+    nfs_commit(app,env.fetched_at)
+}
+fn nfs_merge_into(c,items){
+    for item in items {
+        let found = -1
+        for i in c.projection.len() {
+            let p = c.projection[i]
+            if p.source_app == item.source_app && p.source_module == item.source_module && p.source_record_id == item.source_record_id { found = i }
+        }
+        if found < 0 { c.projection.push(item) }
+        else {
+            let p = c.projection[found]
+            if item.source_revision > p.source_revision { c.projection[found] = item }
+            else {
+                if item.source_revision == p.source_revision {
+                    // Hash equality of verified recomputed hashes stands for
+                    // content equality here; both sides passed HASH_MISMATCH
+                    // recomputation when they entered the projection.
+                    let same = item.alive == p.alive && item.content_hash == p.content_hash && item.deleted_at == p.deleted_at
+                    if !same { return false }
+                }
+            }
+        }
+    }
+    return true
+}
+fn nfs_commit(app,fetched_at){
+    let rt = nfs_runtime_state(app)
+    rt.sync_state = "validating" rt.candidate = nfs_store.to_json().parse_json()
+    nfs_runtime[app] = rt
+    let request = rt.request_id let generation = rt.generation
+    start_timeout(0.01,|| nfs_commit_next(app,request,generation,0,fetched_at))
+}
+fn nfs_commit_next(app,request,generation,index,fetched_at){
+    let rt = nfs_runtime_state(app)
+    if rt.sync_state != "validating" || rt.request_id != request || rt.generation != generation { return }
+    if index < rt.staged.len() {
+        if !nfs_merge_into(rt.candidate,[rt.staged[index]]) {
+            nfs_fail(app,"REVISION_CONFLICT","同修订内容冲突，整轮同步已拒绝。",false) return
+        }
+        nfs_runtime[app] = rt
+        start_timeout(0.01,|| nfs_commit_next(app,request,generation,index + 1,fetched_at))
+        return
+    }
+    let c = rt.candidate let fetched = fetched_at
+    if !fetched.is_string() { fetched = "" }
+    c.checkpoints[app] = {snapshot_revision: rt.snapshot pages: rt.pages fetched_at: fetched}
+    if !nfs_persist(c) { nfs_fail(app,"STORAGE_ERROR","同步结果写入失败；已保留上次合法投影。",true) return }
+    nfc_mark(app,{connection: "available" authorization: "granted" last_sync_at: fetched snapshot_revision: rt.snapshot last_error: nil})
+    nfs_runtime[app] = {sync_state: "succeeded" request_id: request generation: generation}
+    let epoch = business_optional(nf_transport_epochs,app,"")
+    if epoch != "" { nf_transport_watch(app,epoch) }
+}
+fn nf_source_cancel(request_id){
+    let app = ""
+    for key in nf_source_keys(nfs_runtime) {
+        let rt = nfs_runtime[key]
+        if rt.request_id == request_id && (rt.sync_state == "reading" || rt.sync_state == "validating") { app = key }
+    }
+    if app == "" { return nfs_result(false,nil,nfs_err("NOT_FOUND","没有进行中的该请求。",false,request_id,"")) }
+    let rt = nfs_runtime[app]
+    try { nf_transport_cancel(request_id) } catch { nfs_transport_cancel_failed = true }
+    nfs_runtime[app] = {sync_state: "cancelled" request_id: request_id generation: rt.generation + 1}
+    return nfs_result(true,{request_id: request_id state: "cancelled"},nil)
+}
+// Clears the committed projection + checkpoint for one source (deny/revoke).
+fn nfs_clear_source(app){
+    nfs_load()
+    let c = nfs_store.to_json().parse_json()
+    let kept = []
+    for p in c.projection { if p.source_app != app { kept.push(p) } }
+    c.projection = kept
+    let checkpoints = {}
+    for key in nf_source_keys(c.checkpoints) { if key != app { checkpoints[key] = c.checkpoints[key] } }
+    c.checkpoints = checkpoints
+    let rt = nfs_runtime_state(app)
+    if rt.sync_state == "reading" || rt.sync_state == "validating" { try { nf_transport_cancel(rt.request_id) } catch { nfs_transport_cancel_failed = true } }
+    nfs_runtime[app] = {sync_state: "idle" request_id: "" generation: rt.generation + 1}
+    if !nfs_persist(c) { nfs_store_error = true }
+}

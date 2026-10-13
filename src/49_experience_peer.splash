@@ -1,5 +1,5 @@
 // Public contained-app API; no peer_send_input and no fabricated stream events.
-let ex_adapter = "official"
+let ex_adapter = "model"
 let ex_peer_pending = false
 let ex_peer_ticket = ""
 let ex_peer_owner = ""
@@ -29,7 +29,7 @@ fn ex_peer_result(a){
             if p.intent == "query" { valid = ex_plan_valid(p) && p.question.len() <= 1000 }
         }
     } catch { valid = false }
-    if !valid { return {"ok": false message: "字段、来源身份、修订或逐字引用未通过核验。请仅用本轮context内的ref原样提交，勿改写标点或添加未知字段。"} }
+    if !valid { return {"ok": false message: "字段、来源身份、修订或逐字引用未通过核验。每条claim的evidence中同一source_app/source_module/record_id只能有一项，不能重复引用同一记录的title和body。请逐字复制本轮context.records内的ref，包括quote；中文冒号：或逗号，不能改成英文:或,。不要沿用被拒绝的引用。"} }
     ex_peer_output = p
     ex_event("result_submitted","官方 Agent 已通过结果工具提交，来源与修订校验通过；等待本轮结束。") ex_redraw()
     return {"ok": true message: "已接收本轮结构化建议；尚未确认任何关联或费用，原始数据未写入。"}
@@ -40,7 +40,7 @@ fn ex_peer_context(a){
     }
     ex_peer_read = true
     ex_event("tool_completed","官方 Agent 已调用 dailyflow.experience_context，读到本轮限定的上下文。") ex_redraw()
-    return {"ok": true request_id: ex_peer_ticket experience_id: ex_peer_owner query_revision: ex_query_revision source_mode: "import" context: ex_peer_input}
+    return {"ok": true request_id: ex_peer_ticket experience_id: ex_peer_owner query_revision: ex_query_revision source_mode: "per_source" context: ex_peer_input}
 }
 fn ex_peer_interrupt(){
     if !ex_peer_pending { return }

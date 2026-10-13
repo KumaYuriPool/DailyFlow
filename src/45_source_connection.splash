@@ -1,0 +1,177 @@
+fn nf_source_keys(value){ let keys = [] for key item in value { keys.push("" + key) } return keys }
+// 45_source_connection: per-source connection/authorization/scope state (contract v1.0.0 §5).
+// Store: source-connections-v1.json (version 1). Runtime sync state lives in
+// 45_source_sync and is merged into states at read time. Local scope switches
+// never change host authorization; a granted authorization never survives a
+// restart — it must be re-proven by a fresh authorized read.
+let nfc_store = nil
+let nfc_store_error = false
+let nfc_file = "source-connections-v1.json"
+fn nfc_known_sources(){
+    return [
+        {source_app: "dailyflow-ledger" source_module: "expense" label: "DailyFlow Ledger 独立账本" kind: "independent_app" import_file: ""}
+        {source_app: "synthetic-climbing" source_module: "post" label: "模拟社媒样本 · 攀岩（导入）" kind: "synthetic_import" import_file: "timeline-imported.json"}
+        {source_app: "synthetic-concert" source_module: "post" label: "模拟社媒样本 · 演出（导入）" kind: "synthetic_import" import_file: "timeline-imported.json"}
+        {source_app: "synthetic-calendar" source_module: "event" label: "导入日历样本" kind: "synthetic_import" import_file: "timeline-imported.json"}
+        {source_app: "synthetic-expense" source_module: "expense" label: "导入费用样本" kind: "synthetic_import" import_file: "timeline-imported.json"}
+    ]
+}
+fn nfc_known(app){ for k in nfc_known_sources() { if k.source_app == app { return k } } return nil }
+fn nfc_default_entry(kind){
+    let entry = {scope_enabled: true authorization: "unknown" connection: "unknown" last_sync_at: nil snapshot_revision: 0 last_error: nil}
+    if kind == "synthetic_import" { entry.authorization = "not_applicable" entry.connection = "unavailable" }
+    return entry
+}
+fn nfc_entry_valid(e){
+    if !e.is_object() { return false }
+    let keys = nf_source_keys(e)
+    for key in ["scope_enabled" "authorization" "connection" "last_sync_at" "snapshot_revision" "last_error"] { if !timeline_ids_contains(keys,key) { return false } }
+    if !business_optional(e,"scope_enabled",nil).is_bool() { return false }
+    let authorization = business_optional(e,"authorization","")
+    if authorization != "not_applicable" && authorization != "unknown" && authorization != "denied" && authorization != "granted" && authorization != "revoked" { return false }
+    let connection = business_optional(e,"connection","")
+    if connection != "unknown" && connection != "unavailable" && connection != "available" && connection != "imported" { return false }
+    let stamp = business_optional(e,"last_sync_at",nil)
+    if !(stamp == nil || stamp.is_string()) { return false }
+    let revision = business_optional(e,"snapshot_revision",nil)
+    if !revision.is_number() || revision < 0 || revision % 1 != 0 { return false }
+    let error = business_optional(e,"last_error",nil)
+    if !(error == nil || error.is_object()) { return false }
+    return true
+}
+fn nfc_store_valid(v){
+    if !v.is_object() { return false }
+    if business_optional(v,"version",0) != 1 { return false }
+    let epoch = business_optional(v,"auth_epoch",nil)
+    if !epoch.is_number() || epoch < 1 || epoch % 1 != 0 { return false }
+    let sources = business_optional(v,"sources",nil)
+    if !sources.is_object() { return false }
+    for app in nf_source_keys(sources) { if !nfc_entry_valid(sources[app]) { return false } }
+    return true
+}
+fn nfc_fresh_store(){
+    let sources = {}
+    for k in nfc_known_sources() {
+        let e = nfc_default_entry(k.kind)
+        if k.source_app == "synthetic-expense" { e.scope_enabled = false }
+        sources[k.source_app] = e
+    }
+    return {version: 1 auth_epoch: 1 sources: sources}
+}
+fn nfc_persist(candidate){
+    if nfc_store_error { return false }
+    if !nfc_store_valid(candidate) { return false }
+    if !write_checked(nfc_file,candidate.to_json()) { return false }
+    nfc_store = candidate
+    return true
+}
+fn nfc_load(){
+    if nfc_store != nil { return }
+    let data = read_json(nfc_file)
+    if data == nil {
+        if fs.exists(nfc_file) { nfc_store_error = true }
+        nfc_store = nfc_fresh_store()
+        if !nfc_store_error { if !nfc_persist(nfc_store) { nfc_store_error = true } }
+        return
+    }
+    if !nfc_store_valid(data) { nfc_store_error = true nfc_store = nfc_fresh_store() return }
+    // Restart rule: host authorization and transport liveness are re-proven, not
+    // restored. granted -> unknown (cache hidden until a fresh authorized sync);
+    // denied/revoked stay refused; connection falls back to unknown.
+    for app in nf_source_keys(data.sources) {
+        let e = data.sources[app]
+        let k = nfc_known(app)
+        if k != nil && k.kind == "independent_app" {
+            if e.authorization == "granted" { e.authorization = "unknown" }
+            e.connection = "unknown"
+        }
+    }
+    nfc_store = data
+}
+fn nfc_entry(app){
+    nfc_load()
+    let e = nil
+    try { e = nfc_store.sources[app] } catch { e = nil }
+    if e == nil { let k = nfc_known(app) if k == nil { return nil } e = nfc_default_entry(k.kind) }
+    return e
+}
+fn nfc_epoch(){ nfc_load() return nfc_store.auth_epoch }
+// Internal merge+persist used by the sync module; fields is an object of entry keys.
+fn nfc_mark(app,fields){
+    nfc_load()
+    if nfc_store_error { return false }
+    let k = nfc_known(app) if k == nil { return false }
+    let c = nfc_store.to_json().parse_json()
+    let e = nil try { e = c.sources[app] } catch { e = nil }
+    if e == nil { e = nfc_default_entry(k.kind) }
+    // Native object keys distinguish dynamic strings from field identifiers.
+    // Update the canonical fields directly to avoid duplicate serialized keys.
+    for key value in fields {
+        let name = "" + key
+        if name == "scope_enabled" { e.scope_enabled = value }
+        if name == "authorization" { e.authorization = value }
+        if name == "connection" { e.connection = value }
+        if name == "last_sync_at" { e.last_sync_at = value }
+        if name == "snapshot_revision" { e.snapshot_revision = value }
+        if name == "last_error" { e.last_error = value }
+    }
+    c.sources[app] = e
+    return nfc_persist(c)
+}
+// Explicit refusal/revocation: cancel in-flight work, bump auth_epoch so stale
+// bindings stop matching, clear cached details for the source.
+fn nfc_refuse(app,authorization){
+    nfc_load()
+    let c = nfc_store.to_json().parse_json()
+    c.auth_epoch += 1
+    let e = nil try { e = c.sources[app] } catch { e = nil }
+    if e == nil { let k = nfc_known(app) if k == nil { return false } e = nfc_default_entry(k.kind) }
+    e.authorization = authorization e.connection = "unknown"
+    c.sources[app] = e
+    let done = nfc_persist(c)
+    try { nfs_clear_source(app) } catch { done = false }
+    return done
+}
+fn nf_source_states(){
+    sha_build_step()
+    nfc_load()
+    let out = []
+    for k in nfc_known_sources() {
+        let e = nfc_entry(k.source_app)
+        let rt = {sync_state: "idle" request_id: ""}
+        try { let r = nfs_runtime_state(k.source_app) if r != nil { rt = r } } catch { rt = {sync_state: "idle" request_id: ""} }
+        let connection = e.connection let last_sync = e.last_sync_at
+        if k.kind == "synthetic_import" {
+            connection = "unavailable"
+            if k.import_file != "" && fs.exists(k.import_file) {
+                let data = read_json(k.import_file)
+                let recs = business_optional(data,"records",[])
+                if recs.is_array() {
+                    for r in recs { if business_optional(r,"source_app","") == k.source_app { connection = "imported" } }
+                }
+            }
+        }
+        let err = nil if e.last_error != nil { err = e.last_error }
+        if nfc_store_error { err = {code: "STORAGE_ERROR" message: "来源设置无法读取；已停止同步，请保留原文件并恢复备份。" retryable: false} }
+        out.push({contract_version: 1 source_app: k.source_app source_module: k.source_module label: k.label kind: k.kind
+            connection: connection authorization: e.authorization scope_enabled: e.scope_enabled
+            "scope": {modules: [k.source_module] date_from: nil date_to: nil}
+            last_sync_at: last_sync snapshot_revision: e.snapshot_revision
+            sync_state: rt.sync_state request_id: rt.request_id error: err})
+    }
+    return out
+}
+fn nf_source_set_scope(source_app,enabled){
+    nfc_load()
+    let k = nfc_known(source_app)
+    if k == nil { return {"ok": false data: nil error: {code: "NOT_FOUND" message: "未知来源。" retryable: false request_id: "" source_app: source_app}} }
+    if !enabled.is_bool() { return {"ok": false data: nil error: {code: "INVALID_ARGUMENT" message: "enabled 须为布尔值。" retryable: false request_id: "" source_app: source_app}} }
+    if !nfc_mark(source_app,{scope_enabled: enabled}) {
+        return {"ok": false data: nil error: {code: "STORAGE_ERROR" message: "来源状态保存失败。" retryable: true request_id: "" source_app: source_app}}
+    }
+    if !enabled {
+        let rt = nfs_runtime_state(source_app)
+        if rt.sync_state == "reading" || rt.sync_state == "validating" { nf_source_cancel(rt.request_id) }
+    }
+    return {"ok": true data: {source_app: source_app scope_enabled: enabled authorization: nfc_entry(source_app).authorization message: "已更新本机读取范围；宿主授权不变。"} error: nil}
+}

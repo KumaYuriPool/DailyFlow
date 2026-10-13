@@ -695,6 +695,109 @@
       "shareable": false,
       "private_data": true,
       "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.experience_request",
+      "description": "Organize and persist an experience using authorized read-only sources. Send contract_version, request_id, question and source_apps. Omit experience_id or send JSON null to create a new experience. For an existing experience, send its verified exact ID. If the host explicitly rejects missing arguments before execution, correct the arguments and retry at most once with the SAME request_id. For unknown execution outcomes, query experience_request_status first. Host identity binding required; no source writes; acceptance is not completion.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "contract_version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "source_apps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32
+          },
+          "experience_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional: omission or JSON null creates a new experience. Only use a nonempty existing ID when the person selected that experience."
+          }
+        },
+        "required": [
+          "request_id",
+          "contract_version",
+          "question",
+          "source_apps"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "act",
+      "shareable": false,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.experience_request_status",
+      "description": "External experience request_status. Host binding required; returns TRANSPORT_UNAVAILABLE on older hosts. No source writes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "read",
+      "shareable": false,
+      "private_data": true,
+      "implemented_by": "app"
+    },
+    {
+      "name": "dailyflow.experience_request_cancel",
+      "description": "External experience request_cancel. Host binding required; returns TRANSPORT_UNAVAILABLE on older hosts. No source writes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "risk": "act",
+      "shareable": false,
+      "private_data": true,
+      "implemented_by": "app"
     }
   ]
 }

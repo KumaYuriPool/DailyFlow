@@ -1,0 +1,346 @@
+// 66_experience_overlay: overlay state, per-render read cache, and the
+// source-connection display adapter.
+// Helper-only module (no widget tree); the overlay widgets live in
+// 65_experience_ui. Build order: this file must be concatenated BEFORE 60_ui
+// (60_ui opens the root View literal that swallows everything after it).
+//
+// The unified page renders many helper reads per frame; 47/48's public
+// helpers each rescan timeline_data.records, which exceeded the script
+// instruction limit in the real runtime (NF-05 first run). exr_* is a
+// render-local cache: exr_reset() runs as the first statement of
+// experience_shell's on_render, so every frame recomputes exactly once.
+// Writes and decisions still go through 47/48 unchanged.
+//
+// NF-12 seam: real per-source status is owned by S (45_source_connection).
+// Until the integration lands, ex_conn_states() reads, in order:
+//   1. ex_conn_fixture — test-only injection, never set in production builds;
+//   2. source-connections-v1.json — the contract-frozen persistence file
+//      (contract v1.0.0 section 1/5), validated before display;
+//   3. the honest import fallback from timeline_data.sources: imported /
+//      not_applicable, never shown as granted.
+// If S's persisted shape differs from the section-5 item shape, validation
+// fails closed and the UI shows "待集成" instead of guessing.
+
+let ex_overlay = ""
+let ex_conn_fixture = nil
+
+// Overlay layers are permanent named children of experience_shell, toggled by
+// set_visible and rendered on demand — opening/closing an overlay never
+// re-renders the base page, so timeline scroll position and drafts survive.
+// ui.ex_base is the base page; ex_redraw (47, wired in integration.patch)
+// renders it and then calls ex_layers_sync() to keep layers consistent.
+fn ex_layer_render(kind){
+    if kind == "space" { ui.ex_layer_space.render() }
+    if kind == "settings" { ui.ex_layer_settings.render() }
+    if kind == "original" { ui.ex_layer_original.render() }
+    if kind == "changes" { ui.ex_layer_changes.render() }
+    if kind == "drawer" { ui.ex_layer_drawer.render() }
+}
+fn ex_layer_visible(kind,v){
+    if kind == "space" { ui.ex_layer_space.set_visible(v) }
+    if kind == "settings" { ui.ex_layer_settings.set_visible(v) }
+    if kind == "original" { ui.ex_layer_original.set_visible(v) }
+    if kind == "changes" { ui.ex_layer_changes.set_visible(v) }
+    if kind == "drawer" { ui.ex_layer_drawer.set_visible(v) }
+}
+fn ex_overlay_open(kind){ if ex_overlay != "" { ex_layer_visible(ex_overlay,false) } ex_overlay = kind ex_layers_sync() ex_layer_visible(kind,true) }
+fn ex_overlay_close(){ if ex_overlay != "" { ex_layer_visible(ex_overlay,false) ex_overlay = "" ex_layers_sync() } }
+fn ex_overlay_active(){ return ex_overlay != "" }
+fn ex_layers_sync(){
+    let want_drawer = false
+    if ex_detail != "" && !layout_wide && ex_overlay == "" { want_drawer = true }
+    if want_drawer { ex_layer_render("drawer") }
+    ui.ex_layer_drawer.set_visible(want_drawer)
+    if ex_overlay != "" { ex_layer_render(ex_overlay) }
+}
+fn ex_detail_open(key){
+    ex_detail = key
+    if layout_wide { ex_redraw() }
+    else { ex_layer_render("drawer") ui.ex_layer_drawer.set_visible(true) }
+}
+fn ex_detail_close(){
+    ex_detail = ""
+    if layout_wide { ex_redraw() }
+    else { ui.ex_layer_drawer.set_visible(false) }
+}
+
+// ---- per-render read cache ----
+
+let exr_recs = nil
+let exr_vis = nil
+let exr_edges_ready = false
+let exr_edge_map = []
+let exr_edge_dates = []
+let exr_edge_invalid = 0
+fn exr_reset(){
+    exr_recs = nil exr_vis = nil
+    exr_edges_ready = false exr_edge_map = [] exr_edge_dates = [] exr_edge_invalid = 0
+}
+fn exr_records(){ if exr_recs == nil { exr_recs = ex_records() } return exr_recs }
+fn exr_visible(){
+    if exr_vis == nil {
+        let out = [] for r in exr_records() { if !ex_excluded(r) { out.push(r) } }
+        exr_vis = out
+    }
+    return exr_vis
+}
+fn exr_dates(){
+    let out = []
+    for r in exr_records() { if ex_removed == ex_excluded(r) && !timeline_ids_contains(out,r.date) { out.push(r.date) } }
+    return out
+}
+fn exr_for_date(date){
+    let out = []
+    for r in exr_records() { if r.date == date && ex_removed == ex_excluded(r) { out.push(r) } }
+    return out
+}
+fn exr_detail_record(){
+    for r in exr_visible() { if ex_key(r) == ex_detail { return r } }
+    return nil
+}
+fn exr_find(ref){
+    if timeline_error != "" || ex_store_error { return nil }
+    for r in exr_visible() { if ex_reason_ref_equal(ex_reason_ref(r),ref) { return r } }
+    return nil
+}
+fn exr_money_line(){
+    let units = [] let out = "" let unknown = 0
+    for r in exr_visible() { if r.kind == "expense" && !r.future {
+        let unit = business_optional(r,"currency","")
+        if unit == "" || r.amount_minor < 0 { unknown += 1 }
+        else { if !timeline_ids_contains(units,unit) { units.push(unit) } }
+    } }
+    for unit in units {
+        let accepted = 0 let pending = 0
+        for r in exr_visible() {
+            let cur = business_optional(r,"currency","") if cur == "" { cur = "币种未提供" }
+            if r.kind == "expense" && !r.future && r.amount_minor >= 0 && cur == unit { if ex_confirmed(r) { accepted += r.amount_minor } else { pending += r.amount_minor } }
+        }
+        let unit_label = unit if unit == "CNY" { unit_label = "¥" }
+        if out != "" { out += " · " }
+        out += unit_label + " 已确认 " + money(accepted) + " / 待核对 " + money(pending)
+    }
+    if unknown > 0 { out += " · " + unknown + " 笔缺少币种或金额，未计入统计" }
+    if out == "" { return "当前范围没有可统计的已发生账目。" } return out
+}
+
+// ---- unified page helpers (NF-06) ----
+
+fn ex_meta_line(){
+    let range = ex_start + " — " + ex_end
+    if ex_start == "" && ex_end == "" { range = "全部日期" }
+    return range + " · " + ex_source_chips().len() + " 个来源 · " + exr_visible().len() + " 条记录 · " + ex_source_kind_summary()
+}
+
+fn ex_update_line(){
+    for source in ex_source_chips() {
+        let known = nfc_known(source)
+        if known != nil && known.kind == "independent_app" {
+            let stamp = nfc_entry(source).last_sync_at
+            if stamp != nil && stamp != "" { return "独立账本同步时间：" + stamp }
+        }
+    }
+    if timeline_data == nil { return "更新时间：尚无导入快照" }
+    let stamp = business_optional(timeline_data,"generated_at","")
+    if stamp == "" { return "更新时间：导入快照未提供" }
+    return "导入快照更新时间：" + stamp
+}
+fn ex_source_label(source){
+    if source == "synthetic-climbing" { return "攀岩样本" }
+    if source == "synthetic-concert" { return "演出样本" }
+    if source == "synthetic-calendar" { return "日历样本" }
+    if source == "synthetic-expense" { return "费用样本" }
+    if source == "dailyflow-ledger" { return "独立账本" }
+    return source
+}
+fn ex_source_chips(){
+    let out = []
+    for r in exr_records() { if !timeline_ids_contains(out,r.source_app) { out.push(r.source_app) } }
+    return out
+}
+fn ex_conn_label(s){
+    if s.source_app == "dailyflow-ledger" { return "DailyFlow Ledger 独立账本" }
+    return ex_source_label(s.source_app)
+}
+fn ex_edge_kind_label(kind){
+    if kind == "same_experience" { return "同一段经历" }
+    if kind == "sequence" { return "先后延续" }
+    if kind == "supports" { return "内容佐证" }
+    return kind
+}
+// One pass over the candidate edges per frame: liveness from the cached
+// visible set, decisions replicated read-only from 48's ex_reason_status.
+fn exr_build_edges(){
+    if exr_edges_ready { return }
+    exr_edges_ready = true exr_edge_map = [] exr_edge_dates = [] exr_edge_invalid = 0
+    for e in ex_reason_rows() {
+        let a = exr_find(e.from) let b = exr_find(e.to)
+        if a == nil || b == nil { exr_edge_invalid += 1 }
+        else {
+            let st = "pending"
+            for d in ex_reason_array(ex_store,"relation_decisions") {
+                if d.experience == ex_context() && d.key == ex_reason_edge_key(e) {
+                    if ex_reason_same_basis(d,e) { st = d.value }
+                }
+            }
+            let date = b.date
+            if !timeline_ids_contains(exr_edge_dates,date) { exr_edge_dates.push(date) exr_edge_map.push({date: date edges: []}) }
+            for slot in exr_edge_map { if slot.date == date { slot.edges.push({edge: e status: st}) } }
+        }
+    }
+}
+fn ex_edges_for_date(date){
+    exr_build_edges()
+    for slot in exr_edge_map { if slot.date == date { return slot.edges } }
+    return []
+}
+fn ex_invalid_edge_count(){ exr_build_edges() return exr_edge_invalid }
+fn ex_edges_about(r){
+    exr_build_edges()
+    let out = [] let k = ex_key(r)
+    for slot in exr_edge_map {
+        for item in slot.edges {
+            let e = item.edge
+            if ex_reason_ref_key(e.from) == k || ex_reason_ref_key(e.to) == k { out.push(item) }
+        }
+    }
+    return out
+}
+fn ex_edge_other(e,here){
+    if ex_reason_ref_key(e.from) == here { return e.to }
+    return e.from
+}
+// Claims with evidence liveness checked against the cached visible set.
+fn exr_claims(){
+    let out = [] let g = ex_reason_current() if g == nil { return out }
+    for c in ex_reason_array(g,"claims") {
+        let live = true
+        for ev in ex_reason_array(c,"evidence") { if exr_find(ev) == nil { live = false } }
+        if live { out.push(c) }
+    }
+    return out
+}
+
+// ---- source connection display adapter (NF-12 UI; real wiring pending) ----
+
+fn ex_conn_kind_label(k){
+    if k == "independent_app" { return "独立 App" }
+    if k == "synthetic_import" { return "导入样本" }
+    if k == "file_import" { return "文件导入" }
+    if k == "local_legacy" { return "本机旧数据" }
+    return k
+}
+fn ex_conn_state_label(v){
+    if v == "unknown" { return "状态未知" }
+    if v == "unavailable" { return "未连接" }
+    if v == "available" { return "已连接" }
+    if v == "imported" { return "已导入" }
+    return v
+}
+fn ex_conn_auth_label(v){
+    if v == "not_applicable" { return "无需宿主授权" }
+    if v == "unknown" { return "授权未知" }
+    if v == "denied" { return "已拒绝" }
+    if v == "granted" { return "已授权" }
+    if v == "revoked" { return "已撤销" }
+    return v
+}
+fn ex_conn_sync_label(s){
+    let state = business_optional(s,"sync_state","idle")
+    let at = business_optional(s,"last_sync_at","")
+    if at == nil { at = "" }
+    if business_optional(s,"connection","") == "imported" {
+        if at != "" { return "导入快照 · " + at }
+        return "已导入"
+    }
+    let label = "待同步"
+    if state == "reading" { label = "正在读取" }
+    if state == "validating" { label = "正在校验" }
+    if state == "succeeded" { label = "上次同步成功" }
+    if state == "failed" { label = "上次同步失败" }
+    if state == "cancelled" { label = "已取消" }
+    if at != "" { label += " · " + at }
+    let err = business_optional(s,"error","")
+    if err == nil { err = "" }
+    if !err.is_string() { err = business_optional(err,"code","来源状态错误") }
+    if err != "" { label += " · " + err }
+    if state == "idle" && at == "" { return "" }
+    return label
+}
+fn ex_conn_item_valid(s){
+    let shape_ok = false
+    try {
+        shape_ok = s.contract_version == 1 && s.source_app.is_string() && s.source_app != "" && s.source_module.is_string() && s.kind.is_string() && s.connection.is_string() && s.authorization.is_string()
+            && timeline_ids_contains(["independent_app" "synthetic_import" "file_import" "local_legacy"],s.kind)
+            && timeline_ids_contains(["unknown" "unavailable" "available" "imported"],s.connection)
+            && timeline_ids_contains(["not_applicable" "unknown" "denied" "granted" "revoked"],s.authorization)
+    } catch { shape_ok = false }
+    return shape_ok
+}
+// A persisted connection file is not evidence of current host authorization.
+// I must replace this fallback with the live nf_source_states() adapter.
+fn ex_conn_persisted(s){
+    let c = s.to_json().parse_json()
+    if c.kind == "synthetic_import" || c.kind == "file_import" {
+        c.connection = "imported" c.authorization = "not_applicable"
+    } else {
+        c.connection = "unknown" c.authorization = "unknown" c.scope_enabled = false
+        c.sync_state = "failed"
+        c.error = "读取入口待集成；文件状态不是当前宿主授权凭证"
+    }
+    return c
+}
+fn ex_conn_import_fallback(){
+    let out = []
+    if timeline_data == nil { return out }
+    for s in timeline_data.sources {
+        let stamp = business_optional(timeline_data,"generated_at","")
+        out.push({contract_version: 1 source_app: s.source_app source_module: "" label: s.source_app
+            kind: "synthetic_import" connection: "imported" authorization: "not_applicable"
+            scope_enabled: ex_source_enabled(s.source_app) last_sync_at: stamp
+            sync_state: "idle" error: ""})
+    }
+    return out
+}
+fn ex_conn_states(){ if ex_conn_fixture != nil { return ex_conn_fixture } return nf_source_states() }
+
+fn ex_conn_scope_label(s){ if s.scope_enabled { return "停止读取 · " + ex_source_label(s.source_app) } return "允许读取 · " + ex_source_label(s.source_app) }
+
+fn ex_source_kind_summary(){
+    let independent = false let imported = false
+    for r in exr_records() { if r.source_app == "dailyflow-ledger" { independent = true } else { imported = true } }
+    if independent && imported { return "独立账本与导入样本" }
+    if independent { return "独立账本 · 授权工具同步" }
+    return "文件导入样本"
+}
+fn ex_conn_toggle(s){
+    ex_cancel()
+    let enabled = !s.scope_enabled
+    let result = nf_source_set_scope(s.source_app,enabled)
+    if !result["ok"] { ex_status = result.error.message ex_redraw() return }
+    if !enabled { let rt = nfs_runtime_state(s.source_app) if rt.request_id != "" { nf_source_cancel(rt.request_id) } }
+    // Reconcile the previous UI-only disable list with the shared scope state.
+    let c = ex_store.to_json().parse_json() let kept = []
+    for v in c.disabled { if v != s.source_app { kept.push(v) } }
+    c.disabled = kept
+    if !ex_commit(c) { ex_status = "范围已更新，但经历设置写入失败。" }
+    else { ex_status = "读取范围已更新；宿主授权不变。" }
+    ex_detail = "" ex_reason_snapshot = [] ex_redraw()
+}
+fn ex_conn_sync(s){
+    let id = "manual-source-" + canon_floor(time_now())
+    let result = nf_source_sync(s.source_app,id)
+    if !result["ok"] { ex_status = result.error.message }
+    else { ex_status = "正在通过宿主读取独立账本。" start_timeout(0.2,|| ex_conn_wait(s.source_app,id)) }
+    ex_redraw()
+}
+fn ex_conn_wait(app,id){
+    let rt = nfs_runtime_state(app)
+    if rt.request_id != id { return }
+    if rt.sync_state == "succeeded" { ex_status = "独立账本同步成功；经历中的来源记录已更新。" }
+    if rt.sync_state == "failed" { ex_status = "独立账本同步失败，请在来源卡片查看原因。" }
+    if rt.sync_state == "cancelled" { ex_status = "独立账本同步已取消。" }
+    ex_redraw()
+    if rt.sync_state == "reading" || rt.sync_state == "validating" { start_timeout(0.2,|| ex_conn_wait(app,id)) }
+}
+fn ex_conn_cancel(s){ let r = nf_source_cancel(s.request_id) if r["ok"] { ex_status = "同步已取消。" } else { ex_status = r.error.message } ex_redraw() }
