@@ -1,0 +1,5 @@
+dailyflow 0.1.1 — PASSED
+  [warning] publisher-signature: unsigned: accountability rests on the hub alone
+  [warning] tools: dailyflow.save_record is destructive: every call waits for the host's approval
+  [warning] tools: dailyflow.apply is destructive: every call waits for the host's approval
+  declarations: capabilities {"app_tools", "model", "octos.turn.interrupt", "octos.turn.start", "storage"}, hosts {}, storage 16777216 bytes, agent workspace-write
