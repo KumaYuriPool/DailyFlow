@@ -1,4 +1,39 @@
+## 2026-10-14 阶段 B 后 U 补丁已合入 candidate-r3
+
+本轮用户要求合入已完成 U 补丁。交付 `U/delivery/U/post-b-20261014` 的54项摘要和4个基线文件匹配；增量合入47/65/66及bundle/AGENT，保留原candidate-r2，重新生成main SHA256 `f28a17209a4251bf7b7a7bfa4b865dc03ac2183a49bc930fe53cfdda78166a36`。修复来源提示/同步入口、打开经历时旧请求污染输入框、无来源发送保留草稿并打开设置；自然语言指引已更新。
+
+I在阶段B固定runtime-final-r1（四exe哈希重新核验）上串行重跑：宽窄UI22、外部状态机39、宽屏集成41、旧工作台8，共110项通过。外部注入首轮预算超限失败保留，仅该项重跑用4000ms插桩预算，生产包不变；初次严格签名检查拒绝保留，显式本地allow-unsigned准入通过。I亲自打开4张新宽窄截图，无新增遮挡；Esc限制保留。不是14日全最新运行时或新真实模型E2E通过。
+
+已安装r3公共包到原candidate-r2/state/apps；业务文件前后摘要一致，Provider/home/core原地引用、未复制授权。`DailyFlow/run-dailyflow-candidate.cmd` 与 integration-r1/run_candidate.py 默认启动r3；原r2源码/bundle/证据不变，可 --candidate candidate-r2 选择原代码。主DailyFlow/src与bundle仍未整体提升，旧run-dailyflow-latest.cmd也未切换，勿混淆入口。
+
+详见 `DailyFlow/docs/POST_B_U_INTEGRATION_20261014.md`；证据 `DailyFlow/build/overnight-20261013/integration-r1/post-b-u-20261014/final-audit.json`。唯一账本新增post_b_u并更新当前候选，原DF/UX/NF任务对象保持。下一步：普通自然语言真实系统Assistant E2E、平台清空上下文问题、主源码整体提升仍待；不将r2真实E2E转记为r3通过。保护Hub锁/D3D11未变，本轮宿主已退出且租约释放；未创建/联系Agent，未commit/push/tag/publish。
+
 # DailyFlow agent handoff
+
+## 2026-10-12T23:41 阶段 A：NF-00/01 与独立工作副本
+
+已冻结接口 v1.0.0（docs/NIGHT_SPRINT_CONTRACT.md）与实际工作树快照 night-20261013-stage-a-v1，发放目录 D:/Life/AgenticApp/.parallel/night-20261013/{U,S,H}；用户自行开启，未创建或联系其他 Agent。dispatch.json 给文件边界、独立数据/证据/交付目录及运行时段；base 只读，包含必要未提交/未跟踪文件，不含 .git、个人数据、Provider、授权或整棵 build 缓存。具体完整性检查见 DailyFlow/build/overnight-20261013/baseline/dispatch-verification.json。
+
+联网核对29个直接/传递Git来源：Shell 37eb1e23（仅文档）、内核69202ad7（执行逻辑）、App Flow d0344682 已前进；matrix-rust-sdk/vodozemac/ruma-tsp/storytold-filmcraft 另有锁定差距。旧四exe及七树patch精确匹配上次manifest，但现在不是当次全最新。NF-00通过仅代表核对及构建决策完成，NF-01通过仅代表契约冻结；H独占隔离升级/增量构建，最终最新验收待阶段B。保留原二进制及首卡/Rinx/Makepad补丁与两项官方发行门槛。主Hub锁、D3D11与生产包未修改。
+
+H优先高风险探针；U/S先离线。每次真实宿主/GUI/Provider或Rust运行须遵循resource_guard和时段；不复制Provider或授权，旧脚本复制core的行为须先改。未启动构建、宿主、模型或功能实现；未发布。15点优先交局部包，18点冻结、21点整体交付。主execution-state.json仍是唯一账本；副本内JSON只是冻结参考，角色交TASK_RESULTS。收到三份交付路径后I再开始阶段B，不轮询等待。
+
+
+阶段A最终复核补充：三份副本各253个共同文件逐字节一致（根AGENTS为单独摘要的角色映射）；base共254文件，运行时另冻结20份补丁/锁/保护文件。preflight三线通过；S旧实验消费者17项离线通过，U合成样本sync成功，native_runtime四路径/哈希解析通过。未执行宿主/模型/GUI。1632个既有数据文件哈希不变；另5个latest-desktop启动器日志/元数据和宿主news缓存同期变化，精确写入者未确定，本轮未启动宿主/未写这些路径，不回滚。DailyFlow业务数据、Provider/授权与Hub锁/D3D11/生产包保持不变。证据dispatch-verification.json，未把所有个人目录笼统记为完全不变。
+
+## 2026-10-12 23:30：不同IDE独立Agent的prompt与交接方式
+
+用户要四份prompt并询问各线不共享、最后集成。已准备docs/agent-prompts/{COMMON,UI_AGENT,SOURCE_AGENT,SYSTEM_ENTRY_AGENT,INTEGRATOR_AGENT}.md，采用共同只读基线/接口+私有工作副本+文件交付。集成负责人必须先做短阶段A（NF-00/01、当前工作树快照包含必要未提交修改、契约、私有目录、资源安排），三线可不实时通信，阶段B再合并；若坚持只最后传结果，真实跨App/系统端到端均留待集成，不能各自自测就标passed。H早期探针建议单独交付给S/I。
+
+共享47/48/49_experience_peer/60、manifest/tools/catalog/构建器接线单独integration.patch；最终生产bundle和账本仅I维护。角色测试用私有数据与输出；同机编译/宿主验收需错峰，不能因为换IDE就并行争用。原roadmap的49_peer是简称，真实文件为49_experience_peer.splash。本次只写prompt/调度说明，未创建快照/工作副本/冻结接口，也未启动任何Agent、构建或功能实施；NF状态与旧卡保持。额度停止线仍撤销，外发和人工授权边界不变。
+
+## 2026-10-12 22:45后：额度停止线已撤销，新增整夜冲刺计划（优先于历史停止规则）
+
+用户明确取消剩余15%停止线，并要求整夜可用、区分并行/串行与优先级。已建立 docs/OVERNIGHT_ROADMAP_20261013.md：NF-00—21共22卡，M0—M5六里程碑，最多I集成+U界面+S独立账本/同步+H系统入口共4Agent。13日21:00内部交付，18:00功能冻结；13日24:00比赛硬截止不变。三线独立文件可并行，共享47/49/60、生成bundle、catalog、运行时构建与宿主测试需串行资源锁。00:45/03:00/06:30/10:30/15:30有风险决策，P2默认赛后。
+
+独立记账从历史赛后项提升为本轮最小来源；系统Assistant→整理→自动打开指定经历与跨App真实工具同步仍未验收。不能把应用内官方Agent成功、导入样本或点链接打开当这两项通过。空间/设置弹层、统一时间流和独立旧工作台入口为新UI目标。取消额度线不等于自动批准权限或外发。
+
+本次只完成规划落盘，未启动子Agent、功能编码、构建/模型/GUI/发布；执行卡全部not_started，active_task=null。唯一账本docs/execution-state.json追加NF卡，所有旧任务对象/证据/current_candidate/route保持；新增前快照docs/history/pre-overnight-20261012。后续从NF-00最新版本/保护基线开始，NF-01契约后分线，禁止另建第二账本。全最新运行时要求、保护文件与人工授权规则不变。历史15%停止条款已撤销，勿再次按其停工；实际服务限流另论。
 
 ## 2026-10-12 傍晚：全最新运行时验收完成（latest-runtime-20261012-r1 / shell-build-r7）
 

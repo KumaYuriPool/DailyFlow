@@ -1,5 +1,9 @@
 # DailyFlow 执行状态与接手入口
 
+不同IDE接力入口：[分工交付约定](agent-prompts/COMMON.md)。四份prompt位于docs/agent-prompts/；先运行集成负责人阶段A，再三线独立副本开发，最后阶段B合流。当前只建立prompt与流程，NF卡状态未改变。
+
+2026-10-12 夜间计划更新：用户取消额度15%停止线，今晚全时段可用；内部交付目标改为13日21:00，18:00冻结，比赛硬截止仍为13日24:00。新增[夜间冲刺路线图 NF-00—21](OVERNIGHT_ROADMAP_20261013.md)，包含优先级、三线并行/共享资源串行、里程碑和逐卡接力门槛。旧DF/UX记录保留且已快照；新任务均未开始，唯一状态见execution-state.json。以下旧排期与停止规则仅是历史。
+
 ## 当前交接 2026-10-12
 
 UX-00—07 已实施并验收，active_task=null。见 [新里程碑](UX_ROADMAP.md)、[官方回传与关联验收](UX_AGENT_ACCEPTANCE.md)及保留的[首轮界面验收](UX_IMPLEMENTATION_ACCEPTANCE.md)。旧 DF 卡及证据保持不变，新建前快照在 history/pre-ux-20261012。下方旧候选包摘要是历史记录，当前候选取 JSON 的 current_candidate；旧 ZIP 不含新界面，发布材料尚需重建。

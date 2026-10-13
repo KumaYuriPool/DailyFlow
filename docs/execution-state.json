@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "updated_date": "2026-10-12",
-  "scope": "UX-00—07 implemented; DF history retained unchanged; UX-08—10 remain planned",
-  "deadline_beijing": "2026-10-13T24:00:00+08:00",
-  "deadline_iso": "2026-10-14T00:00:00+08:00",
-  "freeze_target": "2026-10-12T12:00:00+08:00",
-  "submit_target": "2026-10-13T12:00:00+08:00",
+  "updated_date": "2026-10-14",
+  "scope": "阶段 B 原 r2 的 NF-00..20 完成记录保留；本轮 U 后续补丁合入 r3，110 项局部回归通过并已安装。r3 未重跑真实系统 Assistant E2E。",
+  "deadline_beijing": "2026-10-14T08:00:00+08:00",
+  "deadline_iso": "2026-10-14T08:00:00+08:00",
+  "freeze_target": "2026-10-13T18:00:00+08:00",
+  "submit_target": "2026-10-13T23:00:00+08:00",
   "route": "B",
   "capabilities": {
     "system_delegation": "blocked_at_rc2_observed",
@@ -19,7 +19,7 @@
   },
   "agent_path": "official_app_agent_with_explicit_model_fallback",
   "active_task": null,
-  "next_action": "本轮两任务完成。若继续，先刷新DF-21发布材料并复现安装；DF-22/25外发单独确认。UX-08图片/UX-09实时接入/UX-10云同步仍待后续安排。",
+  "next_action": "截止修正为10-14 08:00（此前账本误记10-13 24:00）。剩余约5小时：用户提交PR-1与比赛材料；I刷新提交文案。",
   "tasks": [
     {
       "id": "DF-00",
@@ -858,6 +858,622 @@
       "acceptance": "更正/删除/撤权/排除使引用失效，禁止旧确认复活；两故事真实推理，持久化与旧业务回归。",
       "blocker": null,
       "resume_condition": null
+    },
+    {
+      "id": "NF-00",
+      "title": "接管、保护基线与当次最新运行时核对",
+      "priority": "P0",
+      "lane": "I",
+      "milestone": "M0",
+      "dependencies": [],
+      "budget_hours": 0.5,
+      "write_scope": [
+        "build/overnight-20261013/baseline/",
+        "共享账本（仅集成负责人）"
+      ],
+      "steps": "检查工作树和真实运行进程；记录生产包、用户数据及保护文件摘要；联网核对 Shell/Hub/Makepad/OctoScript/桥接/内核和参与构建依赖，与现有 runtime-all.json 比较；建立本轮隔离数据与证据目录。",
+      "acceptance": "有版本矩阵、上游核对时间、二进制路径和哈希、本地补丁清单；明确是否需要增量构建；既有生产数据不变。",
+      "failure_policy": "新上游或构建阻断如实记录；不得退回旧版充作最新版；不重复冷构建或 cargo clean。构建单独排队。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": "night-20261013-stage-a-v1",
+      "evidence": [
+        "build/overnight-20261013/steps/NF-00/night-20261013-stage-a-v1/summary.json",
+        "build/overnight-20261013/steps/NF-00/night-20261013-stage-a-v1/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-01",
+      "title": "冻结三线接口和演示数据身份",
+      "priority": "P0",
+      "lane": "I",
+      "milestone": "M0",
+      "dependencies": [
+        "NF-00"
+      ],
+      "budget_hours": 0.5,
+      "write_scope": [
+        "docs/NIGHT_SPRINT_CONTRACT.md（待新建）"
+      ],
+      "steps": "确定独立账本 app_id/工具名/数据根；复用现有 envelope 的完整来源身份、revision、tombstone、分页；规定外部经历请求、持久化 experience_id、UI定位信号和只读来源状态接口。具体宿主 API 必须由探针确认，拟议名字不得当成现有接口。",
+      "acceptance": "给出版本化接口、错误形状、金额最小单位与币种、请求去重和取消规则；模拟社媒/导入日历/真实独立账本分别标记；三线据同一契约开发。",
+      "failure_policy": "禁止等待最终宿主接口才做所有工作；可用内部适配层，但模拟传输证据不得标为跨 App 实测。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": "night-20261013-stage-a-v1",
+      "evidence": [
+        "build/overnight-20261013/steps/NF-01/night-20261013-stage-a-v1/summary.json",
+        "build/overnight-20261013/steps/NF-01/night-20261013-stage-a-v1/handoff.md"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-02",
+      "title": "应用内弹层最小探针",
+      "priority": "P0",
+      "lane": "U",
+      "milestone": "M0",
+      "dependencies": [
+        "NF-00"
+      ],
+      "budget_hours": 0.75,
+      "write_scope": [
+        "experiments/experience-modal/",
+        "build/overnight-20261013/steps/NF-02/"
+      ],
+      "steps": "使用当前 Splash/Makepad 暴露接口试做遮罩与内容层；验证关闭、输入焦点、滚动、窄屏与背景禁止点击；不先改整页布局。",
+      "acceptance": "真实新宿主中可打开/关闭且背景无误触；记录实际可用 API。Esc 若不受支持须披露并提供可见关闭按钮。",
+      "failure_policy": "到时改用同样保留阅读上下文的侧栏/浮层，明确未达原生 modal 的能力；不修改 Shell 只为视觉动画。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/settings-probe-r1",
+        "candidate-r2 note: U delivery .parallel/night-20261013/U/delivery/U"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-03",
+      "title": "两独立 App 的发现、授权与只读路由探针",
+      "priority": "P0",
+      "lane": "H",
+      "milestone": "M0",
+      "dependencies": [
+        "NF-01"
+      ],
+      "budget_hours": 1.0,
+      "write_scope": [
+        "experiments/source-bridge/ 的本轮隔离副本",
+        "docs/NIGHT_SPRINT_CONTRACT.md（仅提出补充，由 I 合入）"
+      ],
+      "steps": "注册两个独立身份与数据根，在当前真实宿主发起一次只读 source tool；核对 caller/owner、允许和拒绝、原样结构化输出；记录是否需要通用 Shell 路由修复。",
+      "acceptance": "有真实请求/回执/工具审计；能判定当前能力 available/unavailable/unknown。探针结论完成不等于传输可用。",
+      "failure_policy": "00:45 首次决策，最多追加一次有明确复现的通用平台修复，预算2小时；不能用 Python 直接读另一个私有数据根伪装成功。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridgeprobe-final-r1/read-only-audit.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r1"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-04",
+      "title": "系统 Assistant 委派与应用定位探针",
+      "priority": "P0",
+      "lane": "H",
+      "milestone": "M0",
+      "dependencies": [
+        "NF-03"
+      ],
+      "budget_hours": 1.0,
+      "write_scope": [
+        "experiments/system-experience-entry/（待新建）"
+      ],
+      "steps": "从系统 Assistant 的真实入口启动全新请求，检查工具发现/委派，应用启动或聚焦、参数/路由送达。分别探测冷启动与已有窗口，不把 Ask DailyFlow 当系统助手。",
+      "acceptance": "记录新 request/turn、工具归属及 UI 收到的定位标识；明确支持自动拉起还是只能用户点入口。不得引用 done peer 的旧黑板充作执行。",
+      "failure_policy": "03:00 必须有真实证据或最小阻断。仅能点开卡片则记部分能力，自动拉起仍未完成；继续其他线。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-cold-final-r2/e2e-checks.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-warm-final-r2/e2e-checks.json"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-05",
+      "title": "我的空间弹层、设置菜单与旧工作台入口",
+      "priority": "P0",
+      "lane": "U",
+      "milestone": "M1",
+      "dependencies": [
+        "NF-01",
+        "NF-02"
+      ],
+      "budget_hours": 1.5,
+      "write_scope": [
+        "src/65_experience_ui.splash",
+        "新 UI 状态模块；60_ui 接线交 I"
+      ],
+      "steps": "我的空间改为本机空间弹层；新增独立原有工作台入口；设置改菜单/弹层，不替换经历主内容。来源页先使用真实的已导入状态，给 NF-12 留接口。",
+      "acceptance": "返回仍是原经历/原滚动位置；旧日历账目功能可达；无伪账号登录/云上传；关闭后焦点恢复；宽窄屏可操作。",
+      "failure_policy": "保留可用侧栏作为弹层兼容方案；旧工作台内容不重构或迁移。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ui-wide-final-r4",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/workbench-final-r1/summary.json"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-06",
+      "title": "统一经历阅读页与有依据的事件分组",
+      "priority": "P0",
+      "lane": "U",
+      "milestone": "M1",
+      "dependencies": [
+        "NF-05"
+      ],
+      "budget_hours": 2.5,
+      "write_scope": [
+        "src/65_experience_ui.splash",
+        "新增 UI-only 展示模块"
+      ],
+      "steps": "概括放顶部，来源与更新时间紧随；时间流为主阅读区，候选关系就地核对；仅依据经校验的关系或显式记录分组，同日只能表示日期组。保留已有证据与关系决定语义。",
+      "acceptance": "攀岩和演出两场景同一渲染代码；无预写故事答案；原文/关系/费用三种确认不混淆；数据不足不生成虚构阶段或因果。",
+      "failure_policy": "模型缺少可靠事件分组时按日期显示并明确标签；先保证完整文字体验，不以大图作为通过条件。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ui-wide-final-r4"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-07",
+      "title": "详情与就地操作收敛",
+      "priority": "P1",
+      "lane": "U",
+      "milestone": "M2",
+      "dependencies": [
+        "NF-06"
+      ],
+      "budget_hours": 1.5,
+      "write_scope": [
+        "src/65_experience_ui.splash"
+      ],
+      "steps": "宽屏固定详情宽度，窄屏抽屉；显示正文、来源、修订、为什么在这里；将排除/恢复/原始记录操作收进详情；候选关系有两端与证据入口。",
+      "acceptance": "不会因跨来源同 record_id 串详情；源删除/更正/撤权后不显示旧正文或旧确认；没有行内满屏按钮。",
+      "failure_policy": "视觉细节可缩减，删除/撤权失效和可返回必须保留；不以优化为由删掉核验操作。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ui-wide-final-r4"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-08",
+      "title": "独立账本数据与事件协议",
+      "priority": "P0",
+      "lane": "S",
+      "milestone": "M1",
+      "dependencies": [
+        "NF-01"
+      ],
+      "budget_hours": 2.0,
+      "write_scope": [
+        "D:/Life/AgenticApp/DailyFlowLedger/src/",
+        "D:/Life/AgenticApp/DailyFlowLedger/tests/（均待新建）"
+      ],
+      "steps": "独立应用存储与读写层：新增、同ID更正、删除墓碑、revision、请求幂等；生成兼容 DailyFlow 的 envelope/分页输出；不搬迁旧工作台历史数据。",
+      "acceptance": "金额用整数最小单位+币种；重复请求不重复记账；更正不换ID；删除不复活；与旧工作台及 DailyFlow 数据根隔离。",
+      "failure_policy": "不增加预算/分类系统/统计图/账号；保留最小字段和验证。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/producer-contract-r7",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/producer-trace-final-r5",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/producer-storage-final-r6"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-09",
+      "title": "独立账本最小界面、bundle 与工具声明",
+      "priority": "P0",
+      "lane": "S",
+      "milestone": "M1",
+      "dependencies": [
+        "NF-08"
+      ],
+      "budget_hours": 1.5,
+      "write_scope": [
+        "D:/Life/AgenticApp/DailyFlowLedger/bundle/",
+        "DailyFlowLedger 构建器、README、LICENSE"
+      ],
+      "steps": "做列表和新增/更正/删除入口；声明真实读写风险与所需确认，独立 app_id；根目录 bundle，单独本地注册资料；先用测试数据。",
+      "acceptance": "能单独启动操作与重启读回；工具操作与 UI 同一数据层；bundle check 之外有实际运行证据；不依赖打开 DailyFlow 才能记账。",
+      "failure_policy": "不创建或发布新远程仓库；独立本地目录并不代表已经入库。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ledger-ui-narrow-final-r1",
+        "build/overnight-20261013/integration-r1/fix-r1-bundle-hashes.json"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-10",
+      "title": "双 App 注册与受控传输适配",
+      "priority": "P0",
+      "lane": "S",
+      "milestone": "M1",
+      "dependencies": [
+        "NF-03",
+        "NF-09"
+      ],
+      "budget_hours": 1.5,
+      "write_scope": [
+        "DailyFlowLedger 本地注册材料",
+        "DailyFlow/src/ 新独立来源适配模块",
+        "共享 catalog/启动器由 I 合入"
+      ],
+      "steps": "在已验证的路由上注册真实账本，按授权只读拉取；验证非授权caller不可访问；来源输出由程序解析，不让模型转抄账单作为传输。",
+      "acceptance": "当前真实宿主两 App 通信，caller/owner/记录身份可审计；拒绝授权不访问数据；网络/工具不可用有明确状态。",
+      "failure_policy": "仅当 NF-03 传输能力 available 才可实施并通过；否则 blocked，离线导入只能单列备用演示。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r1",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r5"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-11",
+      "title": "工具结果进入确定性同步链",
+      "priority": "P0",
+      "lane": "S",
+      "milestone": "M2",
+      "dependencies": [
+        "NF-10"
+      ],
+      "budget_hours": 2.0,
+      "write_scope": [
+        "DailyFlow/src/ 新来源同步模块",
+        "DailyFlow/tools/ 新跨App测试；47_experience 接线交 I"
+      ],
+      "steps": "将结构化结果送入现有身份/修订/墓碑/排除校验；保留同步游标和失败原子性；更正更新原项，重复拉取不增量计费；撤权使展示/上下文立即不可用。",
+      "acceptance": "真实工具更正/删除/重复页/空页进入生产投影并读回；跨来源同ID隔离；既有本地排除仍有效；零反向写账本。",
+      "failure_policy": "路由成功但未落入同步链不得标记接入完成；单页限制如存在必须显式返回截断。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/consumer-final-r2",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r2"
+      ],
+      "blocker": null,
+      "resume_condition": "capability implemented in U/S/H line deliveries, merged into candidate-r2 and exercised by the listed final integrated tests"
+    },
+    {
+      "id": "NF-12",
+      "title": "连接与授权弹层接入真实状态",
+      "priority": "P0",
+      "lane": "U",
+      "milestone": "M2",
+      "dependencies": [
+        "NF-05",
+        "NF-11"
+      ],
+      "budget_hours": 1.0,
+      "write_scope": [
+        "src/65_experience_ui.splash；来源状态查询接口由 S 提供"
+      ],
+      "steps": "设置中的来源卡显示文件导入/独立App、可用/未授权/已授权/失败、最少范围、同步时间和错误；读取范围开关与宿主授权分别表达；读取动作走真实适配器。",
+      "acceptance": "不能通过勾选本地开关冒充宿主授权；取消/拒绝不自动重试；不伪造社媒账号连接；状态在重启和撤权后正确。",
+      "failure_policy": "来源传输阻断时 UI 可交付真实未连接状态，但本卡的真实接入验收仍 blocked，不标全过。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": "integration-r1",
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/settings-probe-r1",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/scope-final-r1",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ui-wide-final-r4",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r5/native-sync.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-13",
+      "title": "外部经历请求与结果持久化入口",
+      "priority": "P0",
+      "lane": "H",
+      "milestone": "M1",
+      "dependencies": [
+        "NF-01",
+        "NF-04"
+      ],
+      "budget_hours": 2.0,
+      "write_scope": [
+        "DailyFlow/src/ 新外部请求适配模块",
+        "49_peer 公共接线由 I 合入"
+      ],
+      "steps": "为系统入口建立独立请求上下文并复用已校验的官方执行链；绑定 request/turn/experience，保存完成结果和错误；重入去重，取消和超时拒收迟到结果。",
+      "acceptance": "无需预先在 DailyFlow 输入框创建任务也能执行；结果为带来源的结构化对象；不同请求不覆盖；未完成工具链不算完成经历。",
+      "failure_policy": "只有 NF-04 委派路径真实可用才通过；不能绕过现有校验以适配外部调用。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/external-final-r3/report.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-cold-final-r1/durable-result.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-14",
+      "title": "自动打开与指定经历定位",
+      "priority": "P0",
+      "lane": "H",
+      "milestone": "M2",
+      "dependencies": [
+        "NF-13"
+      ],
+      "budget_hours": 2.0,
+      "write_scope": [
+        "外部请求适配模块",
+        "启动/激活接线由 I 合入；共享宿主修复仅 H 提交补丁"
+      ],
+      "steps": "持久化后通过已验证宿主入口启动/聚焦 DailyFlow 并选择 experience_id；冷启动读取待打开标识，热窗口更新；未知/被删除ID显示诚实状态。",
+      "acceptance": "系统 Assistant 全新问题后自动显示本次经历，冷/热各通过一次；无手动点 DailyFlow 输入框补发，无旧黑板/旧截图代替；没有支持就不声称完成。",
+      "failure_policy": "只能返回打开链接/速览卡需标为降级；仍不能冒充自动拉起。不要用全局文件轮询绕过宿主身份和授权。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-cold-final-r2/e2e-checks.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-warm-final-r2/e2e-checks.json"
+      ],
+      "blocker": null,
+      "resume_condition": "auto-open render ack after P1 retry fix; verified in both live runs"
+    },
+    {
+      "id": "NF-15",
+      "title": "三线合流与唯一候选包",
+      "priority": "P0",
+      "lane": "I",
+      "milestone": "M3",
+      "dependencies": [
+        "NF-06",
+        "NF-07",
+        "NF-11",
+        "NF-12",
+        "NF-14"
+      ],
+      "budget_hours": 1.5,
+      "write_scope": [
+        "src/47_experience.splash",
+        "src/49_peer.splash",
+        "src/60_ui.splash",
+        "tools/build_event_app.py",
+        "bundle 生成产物、manifest/tools、catalog/启动器"
+      ],
+      "steps": "按已冻结契约串接三线；只由 I 生成/stamp生产候选，保存每次合入差异；运行受影响的契约和准入检查；锁定候选源码与运行时摘要。",
+      "acceptance": "源工具→同步→官方整理→统一UI为同一候选；旧工作台入口未退化；能力说明符合真实路径。",
+      "failure_policy": "依赖被裁剪时记录未完成卡和缩减候选的单独验收范围；不得强行把依赖改passed。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": "integration-r1",
+      "evidence": [
+        "build/overnight-20261013/integration-r1/delivery-audit.json",
+        "build/overnight-20261013/integration-r1/fix-r1-bundle-hashes.json",
+        "build/overnight-20261013/integration-r1/runtime-final-r1.json",
+        "docs/NIGHT_SPRINT_INTEGRATION.md"
+      ],
+      "blocker": null,
+      "resume_condition": "unique candidate candidate-r2: post-P1-fix main 46a7c6d3, hub digest fef627a2, both apps registered in isolated STATE, full E2E green"
+    },
+    {
+      "id": "NF-16",
+      "title": "独立来源更正、删除、拒绝及重启验收",
+      "priority": "P0",
+      "lane": "S",
+      "milestone": "M3",
+      "dependencies": [
+        "NF-11"
+      ],
+      "budget_hours": 1.25,
+      "write_scope": [
+        "build/overnight-20261013/steps/NF-16/",
+        "独立来源回归脚本"
+      ],
+      "steps": "新测试根中，真实账本记220元→拉取→改200元→再拉取两次→删除→重启；检查用户排除、同号跨源、拒绝/撤权与失败保留；所有源变动用真实业务入口。",
+      "acceptance": "更正保留ID且不重复计费；删除不复活；撤权正文/金额不可见；凭据和真实用户数据不变；审计确认 DailyFlow 只读来源。",
+      "failure_policy": "模型或传输注入测试只能补充，不能替代真实跨 App 验收。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/seed-final-r1",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r1",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r2",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r3",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r4",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridge-final-r5",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/bridgeprobe-final-r1/read-only-audit.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/workbench-final-r1/summary.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-17",
+      "title": "系统入口到经历的真实端到端验收",
+      "priority": "P0",
+      "lane": "H",
+      "milestone": "M3",
+      "dependencies": [
+        "NF-15"
+      ],
+      "budget_hours": 1.5,
+      "write_scope": [
+        "build/overnight-20261013/steps/NF-17/",
+        "系统入口回归脚本"
+      ],
+      "steps": "攀岩冷启动、演出热窗口两个问题，从系统 Assistant 开始；核对独立账本新数据、结构化回传、新turn、展开正确经历；测取消/拒绝/重复请求及完成peer新任务。",
+      "acceptance": "保存完整输入→工具审计→同步→结果→UI证据与相同候选摘要；旧业务无非预期写入；不能只用 in-app official 测试替代。",
+      "failure_policy": "授权等待人操作时释放宿主测试锁并继续离线工作；无答复绝不视为批准；未过项保留失败记录。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-cold-final-r2/e2e-checks.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-warm-final-r2/e2e-checks.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-cold-final-r2/durable-result.json",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/live-warm-final-r2/durable-result.json"
+      ],
+      "blocker": null,
+      "resume_condition": "cold+warm real system Assistant E2E all checks passed; live cancel probe not run (cancel covered by injected consumer test only); warm run demonstrates new task on completed peer; model invalid_args retries rejected and corrected"
+    },
+    {
+      "id": "NF-18",
+      "title": "原型对照视觉与交互验收",
+      "priority": "P0",
+      "lane": "U",
+      "milestone": "M3",
+      "dependencies": [
+        "NF-15"
+      ],
+      "budget_hours": 1.0,
+      "write_scope": [
+        "build/overnight-20261013/steps/NF-18/",
+        "docs/NIGHT_SPRINT_VISUAL_REVIEW.md（待新建）"
+      ],
+      "steps": "同场景对照 experience-v2 原型与生产截图；1280/412宽检查空间、设置、来源、统一时间流、详情、旧工作台、滚动/焦点/遮罩；视需要请求用户协助真实GUI。",
+      "acceptance": "逐项列符合/偏差/理由；无截断或点穿；来源/模拟标识可见；截图必须实际打开查看，hub check和控件树不代替视觉验收。",
+      "failure_policy": "优先修无法操作与误导状态；仅装饰性间距差异可留P2，明确不保证像素级复刻。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "candidate-r2 note: build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/docs/NIGHT_SPRINT_VISUAL_REVIEW.md",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ui-wide-final-r4",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/ledger-ui-narrow-final-r1",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/build/workbench-final-r1"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-19",
+      "title": "18点冻结与关键回归",
+      "priority": "P0",
+      "lane": "I",
+      "milestone": "M4",
+      "dependencies": [
+        "NF-16",
+        "NF-17",
+        "NF-18"
+      ],
+      "budget_hours": 2.0,
+      "write_scope": [
+        "build/overnight-20261013/final/",
+        "唯一任务账本/验收报告"
+      ],
+      "steps": "冻结功能；重核上游与运行二进制，如有新版本按最新规则处理，不静默忽略；对冻结候选运行旧业务保存/更正/重启、经验/peer/关系、拒绝与取消等受影响测试；修复后只补相关回归。",
+      "acceptance": "无阻断缺陷；每份报告有正确源码/包/运行时摘要；新版本导致的未测项明确；旧工作台与保护文件保持，失败日志不覆盖。",
+      "failure_policy": "18点后只修P0/P1；不能完成全范围就交付诚实缩减候选及未完成清单，不挤占最后全部缓冲。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": "integration-r1",
+      "evidence": [
+        "build/overnight-20261013/integration-r1/upstream-drift-final.md",
+        "build/overnight-20261013/integration-r1/upstream-final-2200-direct.json",
+        "build/overnight-20261013/integration-r1/fix-r1-autoopen-retry.patch",
+        "build/overnight-20261013/integration-r1/freeze-1800"
+      ],
+      "blocker": null,
+      "resume_condition": "freeze kept; post-freeze P1 fix documented+regressed; final 29/29 upstream re-check, kernel/matrix drift disclosed, not rebuilt by decision",
+      "integration_note": "17:59:42 已冻结43份应用源码/声明；仅冻结完成，最新Shell编译与关键回归尚未完成，不代表前置通过。"
+    },
+    {
+      "id": "NF-20",
+      "title": "21点交付材料与发布候选",
+      "priority": "P0",
+      "lane": "I",
+      "milestone": "M5",
+      "dependencies": [
+        "NF-19"
+      ],
+      "budget_hours": 1.0,
+      "write_scope": [
+        "docs/ 实际验收与限制",
+        "listing/README/PRIVACY 的实际变化",
+        "新独立发布候选目录"
+      ],
+      "steps": "刷新 DailyFlow 与独立账本启动说明、许可证、包摘要、截图、权限披露和竞赛证据映射；替换草稿中的过时能力声明；输出待审核的具体发布材料，与旧 DF-21/22/25 衔接。",
+      "acceptance": "21:00前可运行候选、可复现步骤、证据索引、限制和待发布动作齐备；旧ZIP仍归档；本地验收与官方发行包兼容性不混淆。",
+      "failure_policy": "发布/推送/tag/提交仍遵照具体外发授权，不因取消额度线自动执行；21–24点是审核/发布/回读缓冲，不新增功能。",
+      "status": "passed",
+      "owner": "I",
+      "run_id": null,
+      "evidence": [
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/docs/NIGHT_SPRINT_DELIVERY_20261013.md",
+        "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/docs/NIGHT_SPRINT_VISUAL_REVIEW.md",
+        "build/overnight-20261013/integration-r1/fix-r1-bundle-hashes.json"
+      ],
+      "blocker": null,
+      "resume_condition": null
+    },
+    {
+      "id": "NF-21",
+      "title": "装饰细节与扩展媒体",
+      "priority": "P2",
+      "lane": "U",
+      "milestone": "POST",
+      "dependencies": [
+        "NF-20"
+      ],
+      "budget_hours": 2.0,
+      "write_scope": [
+        "未来 UI/媒体模块"
+      ],
+      "steps": "大图、动画、复杂无障碍补全仅在正式范围之后安排；账号/云同步、完整记账统计、更多独立来源另开赛后里程碑。",
+      "acceptance": "不得减少核心验收时间；媒体授权、加载失败、资源身份另有真实证据。",
+      "failure_policy": "默认赛后，不计入21点承诺。",
+      "status": "not_started",
+      "owner": null,
+      "run_id": null,
+      "evidence": [],
+      "blocker": null,
+      "resume_condition": null
     }
   ],
   "conditional_gates": {
@@ -889,12 +1505,136 @@
     "DF-22": "concrete publication approval recorded",
     "DF-25": "concrete submission approval and final materials correspond to DF-23",
     "DF-26": "route=B documented",
-    "DF-27": "route=C documented"
+    "DF-27": "route=C documented",
+    "NF-10": "NF-03 evidence proves actual cross_app_transport available on current verified runtime",
+    "NF-13": "NF-04 evidence proves fresh system_assistant_delegation available; app-local entry does not qualify",
+    "NF-14": "actual host activation and experience selection required; clickable-link fallback does not pass",
+    "NF-20": "publication remains separately gated by DF-22/25; local candidate delivery only"
   },
   "current_candidate": {
-    "main_sha256": "d497f4efe2759540a8b256f82ce625b255b47215809ea173a9a2f3170e767859",
-    "bundle_blake3": "79f5eed0c4f5eb9363df375767d46e85ceba3b2a1cbee995620fb7edbbd42a48",
+    "path": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\integration-r1\\candidate-r3",
+    "main_sha256": "f28a17209a4251bf7b7a7bfa4b865dc03ac2183a49bc930fe53cfdda78166a36",
+    "bundle_blake3": "21f04a78f50a0e3278c6aaf6230d62e3c15157c2a5053d49d0460965ff81a0d0",
     "published": false,
-    "acceptance": "docs/UX_AGENT_ACCEPTANCE.md"
+    "acceptance": "docs/POST_B_U_INTEGRATION_20261014.md",
+    "scope": "U patch regression only; previous real E2E applies to r2; main workspace src/bundle not promoted"
+  },
+  "delivery_target": "2026-10-13T21:00:00+08:00",
+  "active_tasks": [],
+  "resource_locks": {
+    "night_runtime_host": {
+      "owner": null,
+      "task": null,
+      "run": null,
+      "process": null,
+      "data_root": null,
+      "state": "unheld; reservations in dispatch.json",
+      "dispatch": "D:\\Life\\AgenticApp\\.parallel\\night-20261013\\dispatch.json",
+      "lease_file": "D:\\Life\\AgenticApp\\.parallel\\night-20261013\\resource-lease.json"
+    }
+  },
+  "planning_policy": {
+    "quota_stop_enabled": false,
+    "quota_stop_revoked_by_user": "2026-10-12",
+    "overnight_available": true,
+    "timezone": "Asia/Shanghai",
+    "max_concurrent_agents": 4,
+    "roadmap": "docs/OVERNIGHT_ROADMAP_20261013.md",
+    "planning_status": "stage_a_ready_runtime_upgrade_pending",
+    "historical_snapshot": "docs/history/pre-overnight-20261012",
+    "external_publication_approval_unchanged": true,
+    "dispatch_mode": "isolated_ide_copies_common_frozen_contract_file_handoff",
+    "dispatch_instructions": "docs/agent-prompts/COMMON.md",
+    "coordinator_stages": [
+      "A: NF-00/01 baseline, contract, private copies and resources before development",
+      "B: integrate independent deliveries and perform final end-to-end acceptance"
+    ],
+    "prompt_files": [
+      "docs/agent-prompts/UI_AGENT.md",
+      "docs/agent-prompts/SOURCE_AGENT.md",
+      "docs/agent-prompts/SYSTEM_ENTRY_AGENT.md",
+      "docs/agent-prompts/INTEGRATOR_AGENT.md"
+    ]
+  },
+  "sprint_capabilities": {
+    "cross_app_transport": "pending_latest_probe",
+    "system_assistant_delegation": "pending_latest_probe",
+    "system_assistant_auto_open": "pending_latest_probe",
+    "app_modal": "pending_runtime_probe"
+  },
+  "milestones": [
+    {
+      "id": "M0",
+      "target_beijing": "2026-10-13T03:00:00+08:00",
+      "exit_gate": "契约+真实能力结论；00:45首轮决策",
+      "status": "not_started"
+    },
+    {
+      "id": "M1",
+      "target_beijing": "2026-10-13T06:30:00+08:00",
+      "exit_gate": "基础UI与独立账本；真实跨App只读结果",
+      "status": "not_started"
+    },
+    {
+      "id": "M2",
+      "target_beijing": "2026-10-13T10:30:00+08:00",
+      "exit_gate": "同步更正删除+系统入口定位闭环",
+      "status": "not_started"
+    },
+    {
+      "id": "M3",
+      "target_beijing": "2026-10-13T15:30:00+08:00",
+      "exit_gate": "同候选两场景与视觉验收，确定最终范围",
+      "status": "not_started"
+    },
+    {
+      "id": "M4",
+      "target_beijing": "2026-10-13T18:00:00+08:00",
+      "exit_gate": "冻结功能，阻断问题收敛",
+      "status": "not_started"
+    },
+    {
+      "id": "M5",
+      "target_beijing": "2026-10-13T21:00:00+08:00",
+      "exit_gate": "冻结候选回归与具体交付材料",
+      "status": "not_started"
+    }
+  ],
+  "stage_a": {
+    "baseline_id": "night-20261013-stage-a-v1",
+    "dispatch": "D:\\Life\\AgenticApp\\.parallel\\night-20261013\\dispatch.json",
+    "contract_version": "1.0.0",
+    "contract_sha256": "8015725c29bb6aee4e8236a46390342d83ee592309f566392644c9ce4983f916",
+    "runtime_latest": false,
+    "rebuild_required": true,
+    "verification": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\baseline\\dispatch-verification.json"
+  },
+  "phase_b": {
+    "run_id": "integration-r1",
+    "owner": "I",
+    "candidate": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\integration-r1\\candidate-r2",
+    "audit": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\integration-r1\\delivery-audit.json",
+    "contract_notes": "docs/NIGHT_SPRINT_INTEGRATION.md",
+    "runtime_latest_verified": false,
+    "source_integration": "complete",
+    "final_e2e": "passed_on_candidate_r2",
+    "updated_at": "2026-10-13T17:23:09.154989",
+    "feature_freeze": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\integration-r1\\freeze-1800\\manifest.json",
+    "final_e2e_main_sha256": "46a7c6d38d3e1da0f03b31032d153df83774eb17653cff74655670adda09f7d3",
+    "completion_reference": "build/overnight-20261013/integration-r1/candidate-r2/DailyFlow/docs/NIGHT_SPRINT_DELIVERY_20261013.md"
+  },
+  "post_b_u": {
+    "status": "merged_installed_local_regressions_passed",
+    "candidate": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\integration-r1\\candidate-r3",
+    "evidence": "D:\\Life\\AgenticApp\\DailyFlow\\build\\overnight-20261013\\integration-r1\\post-b-u-20261014\\final-audit.json",
+    "report": "docs/POST_B_U_INTEGRATION_20261014.md",
+    "checks": {
+      "post-b-ui-r1": 22,
+      "post-b-external-r2": 39,
+      "post-b-wide-r1": 41,
+      "post-b-workbench-r1": 8
+    },
+    "real_system_model_e2e": "not_run",
+    "official_assistant_context_clear": "not_fixed_by_this_patch"
   }
 }
